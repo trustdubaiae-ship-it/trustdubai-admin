@@ -19,7 +19,6 @@ export default function ApplicationsPage() {
         .select('*')
         .eq('status', filter)
         .order('applied_at', { ascending: false })
-      console.log('result:', result)
       setApps(result.data || [])
     } catch(e) {
       console.error('fetch error:', e)
@@ -30,20 +29,14 @@ export default function ApplicationsPage() {
 
   async function approve(app) {
     setProcessing(true)
-    const result = await supabase.from('companies').insert({
-      name: app.company_name, category: app.category, location: app.location,
-      phone: app.phone, whatsapp: app.whatsapp, email: app.email,
-      website: app.website, description: app.description, slug: app.slug,
-      plan: 'free', status: 'active', created_at: new Date().toISOString()
-    }).select().single()
+    const { error } = await supabase
+      .from('company_applications')
+      .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+      .eq('id', app.id)
 
-    if (result.error) { alert('Error: ' + result.error.message); setProcessing(false); return }
+    if (error) { alert('Error: ' + error.message); setProcessing(false); return }
 
-    await supabase.from('company_applications').update({
-      status: 'approved', reviewed_at: new Date().toISOString()
-    }).eq('id', app.id)
-
-    alert('✅ ' + app.company_name + ' approved!')
+    alert('✅ ' + app.company_name + ' approved! Email bhej diya gaya.')
     setProcessing(false)
     fetchApps()
   }
@@ -51,13 +44,20 @@ export default function ApplicationsPage() {
   async function reject(app) {
     if (!rejectReason.trim()) { alert('Please enter rejection reason'); return }
     setProcessing(true)
-    await supabase.from('company_applications').update({
-      status: 'rejected', rejection_reason: rejectReason,
-      reviewed_at: new Date().toISOString()
-    }).eq('id', app.id)
+    const { error } = await supabase
+      .from('company_applications')
+      .update({
+        status: 'rejected',
+        rejection_reason: rejectReason,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', app.id)
+
+    if (error) { alert('Error: ' + error.message); setProcessing(false); return }
+
     setRejectingId(null)
     setRejectReason('')
-    alert('❌ ' + app.company_name + ' rejected.')
+    alert('❌ ' + app.company_name + ' rejected. Email bhej diya gaya.')
     setProcessing(false)
     fetchApps()
   }
