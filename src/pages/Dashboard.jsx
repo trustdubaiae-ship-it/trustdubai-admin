@@ -50,7 +50,7 @@ export default function Dashboard() {
   async function fetchAll() {
     setLoading(true)
     const [statsRes, plansRes, catsRes, regsRes, reviewsRes, topRes, empRes] = await Promise.all([
-      supabase.rpc('exec_sql', { sql: 'SELECT 1' }).catch(() => null),
+      Promise.resolve(null),
       supabase.from('companies').select('plan_name, is_verified, avg_rating, total_reviews'),
       supabase.from('companies').select('category').eq('status', 'approved'),
       supabase.from('company_registrations').select('*').order('submitted_at', { ascending: false }).limit(5),
