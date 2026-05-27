@@ -1,0 +1,12 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+  --sidebar: #1a1a2e; --text: #202124; --text2: #5f6368; --text3: #9aa0a6;
+  --border: #e8eaed; --bg: #f8f9fa; --white: #fff;
+  --green: #1e8e3e; --green-light: #e6f4ea;
+  --red: #d93025; --red-light: #fce8e6;
+  --amber: #f9a825; --amber-light: #fef9e7;
+  --radius: 8px;
+}
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+button, input, select, textarea { font-family: 'DM Sans', sans-serif; }
