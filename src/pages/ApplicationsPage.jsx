@@ -13,13 +13,19 @@ export default function ApplicationsPage() {
 
   async function fetchApps() {
     setLoading(true)
-    const result = await supabase
-      .from('company_applications')
-      .select('*')
-      .eq('status', filter)
-      .order('applied_at', { ascending: false })
-    setApps(result.data || [])
-    setLoading(false)
+    try {
+      const result = await supabase
+        .from('company_applications')
+        .select('*')
+        .eq('status', filter)
+        .order('applied_at', { ascending: false })
+      console.log('result:', result)
+      setApps(result.data || [])
+    } catch(e) {
+      console.error('fetch error:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function approve(app) {

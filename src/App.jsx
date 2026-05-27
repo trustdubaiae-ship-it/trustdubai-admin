@@ -82,6 +82,7 @@ export default function App() {
         {page==='plans' && canAccess('manage_plans') && <Plans />}
         {page==='bulk' && canAccess('bulk_upload') && <BulkUpload />}
         {page==='team' && adminData?.role === 'superadmin' && <Team />}
+        {page==='applications' && <Applications />}
       </div>
     </div>
   )
