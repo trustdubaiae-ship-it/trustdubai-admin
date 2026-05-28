@@ -6,9 +6,6 @@ export default function Reviews() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [starFilter, setStarFilter] = useState(0)
-  const [replyText, setReplyText] = useState({})
-  const [replyingTo, setReplyingTo] = useState(null)
-  const [savingReply, setSavingReply] = useState(false)
 
   useEffect(() => { fetchReviews() }, [])
 
@@ -30,29 +27,6 @@ export default function Reviews() {
   async function del(id) {
     if (!confirm('Delete this review?')) return
     await supabase.from('reviews').delete().eq('id', id)
-    fetchReviews()
-  }
-
-  async function saveReply(id) {
-    const text = replyText[id]?.trim()
-    if (!text) return
-    setSavingReply(true)
-    await supabase.from('reviews').update({
-      owner_reply: text,
-      owner_reply_at: new Date().toISOString()
-    }).eq('id', id)
-    setSavingReply(false)
-    setReplyingTo(null)
-    setReplyText(prev => ({ ...prev, [id]: '' }))
-    fetchReviews()
-  }
-
-  async function deleteReply(id) {
-    if (!confirm('Delete this reply?')) return
-    await supabase.from('reviews').update({
-      owner_reply: null,
-      owner_reply_at: null
-    }).eq('id', id)
     fetchReviews()
   }
 
@@ -154,6 +128,11 @@ export default function Reviews() {
                   }}>
                     {r.is_approved ? 'Approved' : 'Hidden'}
                   </span>
+                  {r.owner_reply && (
+                    <span style={{ background: '#eff6ff', color: '#1a73e8', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>
+                      💬 Replied
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -163,43 +142,17 @@ export default function Reviews() {
                 </p>
               )}
 
-              {/* Owner Reply Display */}
-              {r.owner_reply && replyingTo !== r.id && (
+              {/* Show owner reply if exists */}
+              {r.owner_reply && (
                 <div style={{ background: '#f0fdf4', border: '1px solid #a7f3d0', borderRadius: 8, padding: '10px 12px', marginBottom: 10, marginLeft: 46 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#065f46', marginBottom: 4 }}>
-                    ✅ Owner Reply · {r.owner_reply_at ? new Date(r.owner_reply_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' }) : ''}
+                    ✅ Company Reply · {r.owner_reply_at ? new Date(r.owner_reply_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' }) : ''}
                   </div>
                   <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.6 }}>{r.owner_reply}</p>
                 </div>
               )}
 
-              {/* Reply Input Box */}
-              {replyingTo === r.id && (
-                <div style={{ marginBottom: 10, marginLeft: 46 }}>
-                  <textarea
-                    value={replyText[r.id] || ''}
-                    onChange={e => setReplyText(prev => ({ ...prev, [r.id]: e.target.value }))}
-                    placeholder="Write owner reply..."
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, minHeight: 80, fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical' }}
-                  />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button onClick={() => saveReply(r.id)} disabled={savingReply} style={{
-                      padding: '6px 16px', background: 'var(--primary)', color: '#fff',
-                      border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: 'pointer'
-                    }}>
-                      {savingReply ? 'Saving...' : 'Save Reply'}
-                    </button>
-                    <button onClick={() => setReplyingTo(null)} style={{
-                      padding: '6px 16px', background: '#f3f4f6', color: '#374151',
-                      border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer'
-                    }}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
+              {/* Admin actions — only Approve/Hide/Delete */}
               <div style={{ display: 'flex', gap: 8, paddingLeft: 46 }}>
                 <button onClick={() => toggle(r.id, r.is_approved)} style={{
                   padding: '5px 14px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer',
@@ -208,24 +161,6 @@ export default function Reviews() {
                 }}>
                   {r.is_approved ? 'Hide' : 'Approve'}
                 </button>
-                <button onClick={() => {
-                  setReplyingTo(r.id)
-                  setReplyText(prev => ({ ...prev, [r.id]: r.owner_reply || '' }))
-                }} style={{
-                  padding: '5px 14px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                  background: r.owner_reply ? '#fef9ed' : '#eff6ff',
-                  color: r.owner_reply ? '#92400e' : '#1a73e8'
-                }}>
-                  {r.owner_reply ? '✏️ Edit Reply' : '💬 Reply'}
-                </button>
-                {r.owner_reply && (
-                  <button onClick={() => deleteReply(r.id)} style={{
-                    padding: '5px 14px', borderRadius: 6, border: 'none', fontSize: 12, cursor: 'pointer',
-                    background: '#fef2f2', color: '#ef4444'
-                  }}>
-                    🗑️ Delete Reply
-                  </button>
-                )}
                 <button onClick={() => del(r.id)} style={{
                   padding: '5px 14px', borderRadius: 6, border: 'none', fontSize: 12, cursor: 'pointer',
                   background: '#fef2f2', color: '#ef4444'
