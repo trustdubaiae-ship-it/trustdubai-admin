@@ -19,6 +19,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess }
     { id: 'applications',   icon: 'ti-clipboard-list',   label: 'Applications',    show: true },
     { id: 'companies',      icon: 'ti-building',         label: 'Companies',       show: canAccess('view_companies') },
     { id: 'plan_approvals', icon: 'ti-credit-card',      label: 'Plan Approvals',  show: isSales || isAccounts || isSuperAdmin },
+    { id: 'accounts',       icon: 'ti-report-money',     label: 'Accounts',        show: isAccounts || isSuperAdmin },
     { id: 'reviews',        icon: 'ti-star',             label: 'Reviews',         show: canAccess('view_reviews') },
     { id: 'categories',     icon: 'ti-category',         label: 'Categories',      show: canAccess('manage_categories') },
     { id: 'employees',      icon: 'ti-users',            label: 'Employees',       show: canAccess('manage_employees') },
@@ -34,7 +35,6 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess }
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Admin Panel</div>
       </div>
 
-      {/* Role badge */}
       <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: roleInfo.color, marginBottom: 2 }}>
           {roleInfo.label}
