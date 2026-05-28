@@ -96,7 +96,6 @@ export default function ApplicationsPage() {
         reviewed_by: 'Admin',
       })
       .eq('id', app.id)
-
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
     alert('✅ ' + app.company_name + ' approved!')
     setProcessing(false)
@@ -117,7 +116,6 @@ export default function ApplicationsPage() {
         reviewed_by: 'Admin',
       })
       .eq('id', app.id)
-
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
     setRejectingId(null)
     setRejectReason('')
@@ -132,14 +130,11 @@ export default function ApplicationsPage() {
 
   return (
     <div style={{ padding: 28 }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, color: '#111827' }}>Business Applications</h1>
           <p style={{ color: '#6b7280', fontSize: 14 }}>Review and approve company registration requests</p>
         </div>
-
-        {/* Easy / Strict Mode Toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 13, color: '#6b7280' }}>Review Mode:</span>
           <button onClick={toggleReviewMode} style={{
@@ -158,7 +153,6 @@ export default function ApplicationsPage() {
         </div>
       </div>
 
-      {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {['pending', 'approved', 'rejected'].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
@@ -190,7 +184,6 @@ export default function ApplicationsPage() {
                 background: 'white', border: '1px solid #e5e7eb',
                 borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
               }}>
-                {/* App Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{app.company_name}</div>
@@ -208,12 +201,15 @@ export default function ApplicationsPage() {
                   </div>
                 </div>
 
-                {/* Company Details */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-                  {[['👤 Owner', app.owner_name], ['📞 Phone', app.phone], ['✉️ Email', app.email],
-                    ['💬 WhatsApp', app.whatsapp], ['🔢 TL Number', app.tl_number],
+                  {[
+                    ['👤 Owner', app.owner_name],
+                    ['📞 Phone', app.phone],
+                    ['✉️ Email', app.email],
+                    ['💬 WhatsApp', app.whatsapp],
+                    ['🔢 TL Number', app.tl_number],
                     ['📅 TL Expiry', app.tl_expiry_date]
-                  ].filter(([,v]) => v).map(([l, v]) => (
+                  ].filter(([, v]) => v).map(([l, v]) => (
                     <div key={l} style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px' }}>
                       <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>{l}</div>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{v}</div>
@@ -221,12 +217,12 @@ export default function ApplicationsPage() {
                   ))}
                 </div>
 
-                {/* Trade License PDF */}
                 {app.tl_pdf_url && (
                   <div style={{ marginBottom: 12 }}>
                     
-                      href={`https://ribdorraxxhfbfkjhpie.supabase.co/storage/v1/object/sign/trade-licenses/${app.tl_pdf_url}`}
-                      target="_blank" rel="noopener noreferrer"
+                      href={'https://ribdorraxxhfbfkjhpie.supabase.co/storage/v1/object/public/trade-licenses/' + app.tl_pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
                     >
                       📄 View Trade License PDF
@@ -246,7 +242,6 @@ export default function ApplicationsPage() {
                   </div>
                 )}
 
-                {/* Checklist — only for pending */}
                 {filter === 'pending' && (
                   <div style={{ marginBottom: 14 }}>
                     <div
@@ -297,7 +292,6 @@ export default function ApplicationsPage() {
                   </div>
                 )}
 
-                {/* Approve / Reject Buttons */}
                 {filter === 'pending' && (
                   rejectingId === app.id ? (
                     <div>
@@ -321,7 +315,8 @@ export default function ApplicationsPage() {
                         onClick={() => approve(app)}
                         disabled={processing || !approveOk}
                         style={{
-                          padding: '9px 20px', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: approveOk ? 'pointer' : 'not-allowed',
+                          padding: '9px 20px', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13,
+                          cursor: approveOk ? 'pointer' : 'not-allowed',
                           background: approveOk ? '#10b981' : '#d1d5db',
                           color: approveOk ? 'white' : '#9ca3af',
                         }}>
