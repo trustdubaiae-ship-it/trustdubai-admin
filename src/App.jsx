@@ -10,6 +10,7 @@ import BulkUpload from './pages/BulkUpload'
 import Plans from './pages/Plans'
 import Team from './pages/Team'
 import Applications from './pages/ApplicationsPage'
+import PlanApprovals from './pages/PlanApprovals'
 import Sidebar from './components/Sidebar'
 
 export default function App() {
@@ -42,9 +43,13 @@ export default function App() {
 
   function canAccess(permission) {
     if (!adminData) return false
-    if (adminData.role === 'superadmin') return true
+    if (adminData.role === 'superadmin' || adminData.role === 'super_admin') return true
     return adminData.permissions?.[permission] === true
   }
+
+  const isSuperAdmin = adminData?.role === 'superadmin' || adminData?.role === 'super_admin'
+  const isSales = adminData?.role === 'sales' || isSuperAdmin
+  const isAccounts = adminData?.role === 'accounts' || isSuperAdmin
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--sidebar)' }}>
@@ -74,15 +79,16 @@ export default function App() {
     <div style={{ display:'flex', minHeight:'100vh' }}>
       <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} />
       <div style={{ flex:1, marginLeft:240, padding:24, background:'var(--bg)', minHeight:'100vh' }}>
-        {page==='dashboard' && <Dashboard />}
-        {page==='companies' && <Companies canAccess={canAccess} />}
-        {page==='reviews' && <Reviews canAccess={canAccess} />}
-        {page==='categories' && canAccess('manage_categories') && <Categories />}
-        {page==='employees' && canAccess('manage_employees') && <Employees />}
-        {page==='plans' && canAccess('manage_plans') && <Plans />}
-        {page==='bulk' && canAccess('bulk_upload') && <BulkUpload />}
-        {page==='team' && adminData?.role === 'superadmin' && <Team />}
-        {page==='applications' && <Applications />}
+        {page === 'dashboard'      && <Dashboard />}
+        {page === 'companies'      && <Companies canAccess={canAccess} />}
+        {page === 'reviews'        && <Reviews canAccess={canAccess} />}
+        {page === 'categories'     && canAccess('manage_categories') && <Categories />}
+        {page === 'employees'      && canAccess('manage_employees') && <Employees />}
+        {page === 'plans'          && canAccess('manage_plans') && <Plans />}
+        {page === 'bulk'           && canAccess('bulk_upload') && <BulkUpload />}
+        {page === 'team'           && isSuperAdmin && <Team />}
+        {page === 'applications'   && <Applications />}
+        {page === 'plan_approvals' && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
       </div>
     </div>
   )
