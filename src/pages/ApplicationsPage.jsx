@@ -125,7 +125,7 @@ export default function ApplicationsPage() {
   }
 
   const statusColor = { accepted: '#10b981', rejected: '#ef4444', pending: '#9ca3af' }
-  const statusBg    = { accepted: '#ecfdf5', rejected: '#fef2f2', pending: '#f9fafb' }
+  const statusBg = { accepted: '#ecfdf5', rejected: '#fef2f2', pending: '#f9fafb' }
   const statusLabel = { accepted: '✓ Accepted', rejected: '✗ Rejected', pending: '— Pending' }
 
   return (
@@ -178,6 +178,7 @@ export default function ApplicationsPage() {
             const allAccepted = CHECKLIST_FIELDS.every(f => cl[f.key] === 'accepted')
             const approveOk = canApprove(app.id)
             const isExpanded = expandedId === app.id
+            const tlUrl = 'https://ribdorraxxhfbfkjhpie.supabase.co/storage/v1/object/public/trade-licenses/' + app.tl_pdf_url
 
             return (
               <div key={app.id} style={{
@@ -208,7 +209,7 @@ export default function ApplicationsPage() {
                     ['✉️ Email', app.email],
                     ['💬 WhatsApp', app.whatsapp],
                     ['🔢 TL Number', app.tl_number],
-                    ['📅 TL Expiry', app.tl_expiry_date]
+                    ['📅 TL Expiry', app.tl_expiry_date],
                   ].filter(([, v]) => v).map(([l, v]) => (
                     <div key={l} style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px' }}>
                       <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>{l}</div>
@@ -219,12 +220,11 @@ export default function ApplicationsPage() {
 
                 {app.tl_pdf_url && (
                   <div style={{ marginBottom: 12 }}>
-                    
-                      href={'https://ribdorraxxhfbfkjhpie.supabase.co/storage/v1/object/public/trade-licenses/' + app.tl_pdf_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
-                    >
+                    <a href={tlUrl} target="_blank" rel="noopener noreferrer" style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 14px', background: '#eff6ff', color: '#1d4ed8',
+                      borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none'
+                    }}>
                       📄 View Trade License PDF
                     </a>
                   </div>
