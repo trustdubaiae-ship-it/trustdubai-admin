@@ -18,6 +18,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess }
     { id: 'dashboard',      icon: 'ti-dashboard',        label: 'Dashboard',       show: true },
     { id: 'applications',   icon: 'ti-clipboard-list',   label: 'Applications',    show: true },
     { id: 'companies',      icon: 'ti-building',         label: 'Companies',       show: canAccess('view_companies') },
+    { id: 'leads',          icon: 'ti-address-book',     label: 'All Leads',       show: true },
     { id: 'plan_approvals', icon: 'ti-credit-card',      label: 'Plan Approvals',  show: isSales || isAccounts || isSuperAdmin },
     { id: 'accounts',       icon: 'ti-report-money',     label: 'Accounts',        show: isAccounts || isSuperAdmin },
     { id: 'reviews',        icon: 'ti-star',             label: 'Reviews',         show: canAccess('view_reviews') },
