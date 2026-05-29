@@ -12,6 +12,7 @@ import Team from './pages/Team'
 import Applications from './pages/ApplicationsPage'
 import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
+import Leads from './pages/Leads'
 import Sidebar from './components/Sidebar'
 
 export default function App() {
@@ -84,6 +85,7 @@ export default function App() {
         {page === 'dashboard'      && <Dashboard />}
         {page === 'companies'      && <Companies canAccess={canAccess} />}
         {page === 'reviews'        && <Reviews canAccess={canAccess} />}
+        {page === 'leads'          && <Leads />}
         {page === 'categories'     && canAccess('manage_categories') && <Categories />}
         {page === 'employees'      && canAccess('manage_employees') && <Employees />}
         {page === 'plans'          && canAccess('manage_plans') && <Plans />}
