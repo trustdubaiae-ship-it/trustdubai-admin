@@ -55,9 +55,8 @@ function Field({ label, value, onChange }) {
 export default function Companies({ initialPlanFilter }) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   const [, forceUpdate] = useState(0)
-
   const [tab, setTab] = useState('approved')
-  const [viewMode, setViewMode] = useState('list') // list | card | icon
+  const [viewMode, setViewMode] = useState('list')
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -142,7 +141,11 @@ export default function Companies({ initialPlanFilter }) {
     if (!planModal || !selectedPlan) return
     setSavingPlan(true)
     const expiryDate = selectedPlan === 'free' ? null : getExpiryDate()
-    await supabase.from('companies').update({ plan: selectedPlan, plan_started_at: new Date().toISOString(), plan_expires_at: expiryDate }).eq('id', planModal.id)
+    await supabase.from('companies').update({
+      plan: selectedPlan,
+      plan_started_at: new Date().toISOString(),
+      plan_expires_at: expiryDate
+    }).eq('id', planModal.id)
 
     if (selectedPlan !== 'free') {
       const { data: accountsUsers } = await supabase.from('admin_users').select('id').eq('role', 'accounts').eq('is_active', true)
@@ -161,35 +164,57 @@ export default function Companies({ initialPlanFilter }) {
     alert(selectedPlan === 'free' ? '✅ Plan set to Free!' : `✅ Plan saved! Accounts notified for AED ${finalTotal}.`)
   }
 
-  const pending = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
+  const pending  = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
   const approved = companies.filter(c => c.status === 'approved')
-  let displayList = tab === 'pending' ? pending : tab === 'approved' ? approved : companies
-  if (planFilter !== 'all') displayList = displayList.filter(c => (c.plan || 'free') === planFilter)
-  if (search) displayList = displayList.filter(c => c.name?.toLowerCase().includes(search.toLowerCase()) || c.category?.toLowerCase().includes(search.toLowerCase()) || c.area?.toLowerCase().includes(search.toLowerCase()))
+  const baseList = tab === 'pending' ? pending : tab === 'approved' ? approved : companies
 
-  const text = isDark ? '#f1f5f9' : '#0f172a'
-  const textSub = isDark ? '#94a3b8' : '#64748b'
+  let displayList = baseList
+  if (planFilter !== 'all') displayList = displayList.filter(c => (c.plan || 'free') === planFilter)
+  if (search) displayList = displayList.filter(c =>
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.category?.toLowerCase().includes(search.toLowerCase()) ||
+    c.area?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const text      = isDark ? '#f1f5f9' : '#0f172a'
+  const textSub   = isDark ? '#94a3b8' : '#64748b'
   const textMuted = isDark ? '#475569' : '#94a3b8'
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'
-  const cardBg = isDark ? '#1e293b' : '#ffffff'
-  const bgRow = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
+  const cardBg    = isDark ? '#1e293b' : '#ffffff'
+  const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
 
   const btn = (color, bg) => ({ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', color, background: bg })
-
-  const initials = (name) => name?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
+  const initials   = (name) => name?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
   const avatarColors = ['#1a73e8', '#1e8e3e', '#d93025', '#f9a825', '#9c27b0', '#00897b']
-  const avatarColor = (name) => avatarColors[name?.charCodeAt(0) % avatarColors.length] || '#1a73e8'
+  const avatarColor  = (name) => avatarColors[name?.charCodeAt(0) % avatarColors.length] || '#1a73e8'
+
+  // Plan counts based on current tab
+  const planCounts = {
+    all:      baseList.length,
+    free:     baseList.filter(c => (c.plan || 'free') === 'free').length,
+    silver:   baseList.filter(c => (c.plan || 'free') === 'silver').length,
+    gold:     baseList.filter(c => (c.plan || 'free') === 'gold').length,
+    platinum: baseList.filter(c => (c.plan || 'free') === 'platinum').length,
+  }
+
+  const PLAN_CARDS = [
+    { key: 'all',      label: 'All',      color: '#03C1F5', bg: isDark ? 'rgba(3,193,245,0.12)'   : '#e0f9ff' },
+    { key: 'free',     label: 'Free',     color: '#6b7280', bg: isDark ? 'rgba(107,114,128,0.12)' : '#f3f4f6' },
+    { key: 'silver',   label: 'Silver',   color: '#94a3b8', bg: isDark ? 'rgba(148,163,184,0.12)' : '#f1f5f9' },
+    { key: 'gold',     label: 'Gold',     color: '#e8b84b', bg: isDark ? 'rgba(232,184,75,0.12)'  : '#fffdf7' },
+    { key: 'platinum', label: 'Platinum', color: '#8b5cf6', bg: isDark ? 'rgba(139,92,246,0.12)'  : '#f5f3ff' },
+  ]
 
   return (
     <div>
+
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: text }}>Companies</h1>
           <p style={{ fontSize: 13, color: textSub, marginTop: 4 }}>Manage all listings · {displayList.length} shown</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* View toggle */}
           <div style={{ display: 'flex', background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9', borderRadius: 8, padding: 3, border: '1px solid ' + borderCol }}>
             {[
               { id: 'list', icon: 'ti-list' },
@@ -205,17 +230,38 @@ export default function Companies({ initialPlanFilter }) {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* Plan Filter Cards — 5 cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 16 }}>
+        {PLAN_CARDS.map(p => (
+          <div key={p.key}
+            onClick={() => setPlanFilter(p.key)}
+            style={{
+              background: planFilter === p.key ? p.bg : cardBg,
+              border: '2px solid ' + (planFilter === p.key ? p.color : borderCol),
+              borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+              textAlign: 'center', transition: 'all 0.15s',
+              boxShadow: planFilter === p.key ? '0 4px 12px ' + p.color + '33' : 'none',
+            }}
+            onMouseEnter={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = p.color; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+            onMouseLeave={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = borderCol; e.currentTarget.style.transform = 'none' } }}
+          >
+            <div style={{ fontSize: 24, fontWeight: 700, color: planFilter === p.key ? p.color : text, lineHeight: 1 }}>
+              {planCounts[p.key]}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: planFilter === p.key ? p.color : textSub, marginTop: 5 }}>
+              {p.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search Filter */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' }}>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search company, category, area..."
-          style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, outline: 'none' }}
+          style={{ flex: 1, padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, outline: 'none' }}
         />
-        <select value={planFilter} onChange={e => setPlanFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, outline: 'none', cursor: 'pointer' }}>
-          <option value="all">All Plans</option>
-          {Object.entries(PLANS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
-        </select>
       </div>
 
       {/* Tabs */}
@@ -243,7 +289,6 @@ export default function Companies({ initialPlanFilter }) {
           <p style={{ color: textMuted, fontSize: 14 }}>No companies found</p>
         </div>
       ) : (
-
         <>
           {/* LIST VIEW */}
           {viewMode === 'list' && (
@@ -258,7 +303,7 @@ export default function Companies({ initialPlanFilter }) {
                 </thead>
                 <tbody>
                   {displayList.map(c => {
-                    const plan = PLANS[c.plan || 'free'] || PLANS.free
+                    const plan   = PLANS[c.plan || 'free'] || PLANS.free
                     const expiry = formatExpiry(c.plan_expires_at)
                     return (
                       <tr key={c.id} style={{ borderBottom: '1px solid ' + borderCol, cursor: 'pointer' }}
@@ -310,7 +355,7 @@ export default function Companies({ initialPlanFilter }) {
           {viewMode === 'card' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
               {displayList.map(c => {
-                const plan = PLANS[c.plan || 'free'] || PLANS.free
+                const plan   = PLANS[c.plan || 'free'] || PLANS.free
                 const expiry = formatExpiry(c.plan_expires_at)
                 return (
                   <div key={c.id} onClick={() => setDetailC(c)}
@@ -382,10 +427,10 @@ export default function Companies({ initialPlanFilter }) {
       {detailC && (
         <Modal title={detailC.name} onClose={() => setDetailC(null)} wide>
           {(() => {
-            const plan = PLANS[detailC.plan || 'free'] || PLANS.free
+            const plan   = PLANS[detailC.plan || 'free'] || PLANS.free
             const expiry = formatExpiry(detailC.plan_expires_at)
-            const isDk = document.documentElement.getAttribute('data-theme') === 'dark'
-            const t = isDk ? '#f1f5f9' : '#0f172a'
+            const isDk   = document.documentElement.getAttribute('data-theme') === 'dark'
+            const t  = isDk ? '#f1f5f9' : '#0f172a'
             const ts = isDk ? '#94a3b8' : '#64748b'
             const bc = isDk ? 'rgba(255,255,255,0.08)' : '#e2e8f0'
             const row = (label, value) => value ? (
@@ -396,14 +441,13 @@ export default function Companies({ initialPlanFilter }) {
             ) : null
             return (
               <div>
-                {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: '16px', background: isDk ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: 16, background: isDk ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 12 }}>
                   <div style={{ width: 60, height: 60, borderRadius: 14, background: avatarColor(detailC.name) + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: avatarColor(detailC.name), flexShrink: 0 }}>
                     {initials(detailC.name)}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 18, fontWeight: 700, color: t }}>{detailC.name}</div>
-                    <div style={{ fontSize: 13, color: ts, marginTop: 2 }}>{detailC.category} {detailC.area ? '· ' + detailC.area : ''}</div>
+                    <div style={{ fontSize: 13, color: ts, marginTop: 2 }}>{detailC.category}{detailC.area ? ' · ' + detailC.area : ''}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{plan.label}</span>
                       <span style={{ background: detailC.status === 'approved' ? (isDk ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDk ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: detailC.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>{detailC.status}</span>
@@ -418,8 +462,6 @@ export default function Companies({ initialPlanFilter }) {
                     </div>
                   )}
                 </div>
-
-                {/* Details */}
                 <div style={{ marginBottom: 16 }}>
                   {row('Phone', detailC.phone)}
                   {row('WhatsApp', detailC.whatsapp)}
@@ -438,12 +480,10 @@ export default function Companies({ initialPlanFilter }) {
                     </div>
                   )}
                 </div>
-
-                {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => { setDetailC(null); setEditC(detailC) }} style={{ flex: 1, padding: '10px', background: '#03C1F5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>✏️ Edit</button>
-                  <button onClick={() => { setDetailC(null); openPlanModal(detailC) }} style={{ flex: 1, padding: '10px', background: plan.bg, color: plan.color, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>💎 Change Plan</button>
-                  <button onClick={() => { update(detailC.id, { is_verified: !detailC.is_verified }); setDetailC(null) }} style={{ flex: 1, padding: '10px', background: isDk ? 'rgba(30,142,62,0.15)' : '#e6f4ea', color: '#1e8e3e', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                  <button onClick={() => { setDetailC(null); setEditC(detailC) }} style={{ flex: 1, padding: 10, background: '#03C1F5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>✏️ Edit</button>
+                  <button onClick={() => { setDetailC(null); openPlanModal(detailC) }} style={{ flex: 1, padding: 10, background: plan.bg, color: plan.color, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>💎 Change Plan</button>
+                  <button onClick={() => { update(detailC.id, { is_verified: !detailC.is_verified }); setDetailC(null) }} style={{ flex: 1, padding: 10, background: isDk ? 'rgba(30,142,62,0.15)' : '#e6f4ea', color: '#1e8e3e', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                     {detailC.is_verified ? '✓ Unverify' : '✓ Verify'}
                   </button>
                   {detailC.slug && (
@@ -491,7 +531,7 @@ export default function Companies({ initialPlanFilter }) {
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: textSub, marginBottom: 8 }}>3. Discount %</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(Math.min(100, Math.max(0, Number(e.target.value))))} style={{ width: 70, padding: '8px', border: '1px solid ' + borderCol, borderRadius: 6, fontSize: 16, fontWeight: 700, textAlign: 'center', background: isDark ? '#0f172a' : '#fff', color: text }} />
+                  <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(Math.min(100, Math.max(0, Number(e.target.value))))} style={{ width: 70, padding: 8, border: '1px solid ' + borderCol, borderRadius: 6, fontSize: 16, fontWeight: 700, textAlign: 'center', background: isDark ? '#0f172a' : '#fff', color: text }} />
                   {[0, 5, 10, 15, 20].map(d => (
                     <button key={d} onClick={() => setDiscount(d)} style={{ padding: '5px 10px', border: '1px solid ' + (discount === d ? '#03C1F5' : borderCol), borderRadius: 6, fontSize: 12, cursor: 'pointer', background: discount === d ? (isDark ? 'rgba(3,193,245,0.1)' : '#e0f9ff') : 'transparent', color: discount === d ? '#03C1F5' : textSub, fontWeight: discount === d ? 600 : 400 }}>{d}%</button>
                   ))}
