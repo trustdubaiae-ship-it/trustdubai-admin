@@ -17,7 +17,6 @@ export default function Leads() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [companyFilter, setCompanyFilter] = useState('all')
   const [companies, setCompanies] = useState([])
-  const [updatingStatus, setUpdatingStatus] = useState(null)
   const [period, setPeriod] = useState('all')
 
   useEffect(() => { fetchAll() }, [])
@@ -42,16 +41,6 @@ export default function Leads() {
     }
     setCompanies(uniqueCompanies)
     setLoading(false)
-  }
-
-  async function updateStatus(leadId, status) {
-    setUpdatingStatus(leadId)
-    await supabase.from('lead_submissions').update({
-      status,
-      status_updated_at: new Date().toISOString()
-    }).eq('id', leadId)
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status } : l))
-    setUpdatingStatus(null)
   }
 
   function filterByPeriod(data) {
@@ -92,13 +81,21 @@ export default function Leads() {
   const wonLeads = filtered.filter(l => l.status === 'won').length
   const newLeads = filtered.filter(l => !l.status || l.status === 'new').length
   const activeLeads = filtered.filter(l => !['won', 'lost'].includes(l.status || 'new')).length
+  const wonRate = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0
+
+  // Company wise breakdown
+  const companyBreakdown = companies.map(c => {
+    const cLeads = filtered.filter(l => l.company_id === c.id)
+    const cWon = cLeads.filter(l => l.status === 'won').length
+    return { ...c, total: cLeads.length, won: cWon, rate: cLeads.length > 0 ? Math.round((cWon / cLeads.length) * 100) : 0 }
+  }).filter(c => c.total > 0).sort((a, b) => b.total - a.total)
 
   return (
     <div style={{ maxWidth: 1100 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600 }}>All Leads</h1>
-          <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>All leads from all companies in one place</p>
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>All leads from all companies — read only view</p>
         </div>
         {/* Period filter */}
         <div style={{ display: 'flex', gap: 6 }}>
@@ -119,37 +116,53 @@ export default function Leads() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total Leads', value: totalLeads, color: '#03C1F5' },
           { label: 'New', value: newLeads, color: '#8b5cf6' },
           { label: 'Active', value: activeLeads, color: '#f59e0b' },
           { label: 'Won', value: wonLeads, color: '#10b981' },
+          { label: 'Won Rate', value: wonRate + '%', color: '#10b981' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
+      {/* Company breakdown */}
+      {companyBreakdown.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Company-wise Conversion</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {companyBreakdown.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, width: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <div style={{ flex: 1, height: 6, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ width: c.rate + '%', height: '100%', background: c.rate >= 50 ? '#10b981' : c.rate >= 25 ? '#f59e0b' : '#03C1F5', borderRadius: 99, transition: 'width 0.5s' }} />
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', width: 80, textAlign: 'right' }}>
+                  {c.won}/{c.total} · <strong style={{ color: '#10b981' }}>{c.rate}%</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        {/* Search */}
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, phone, email, company..."
           style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none' }}
         />
-
-        {/* Status filter */}
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, background: '#fff', cursor: 'pointer' }}>
           <option value="all">All Status</option>
           {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-
-        {/* Company filter */}
         <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, background: '#fff', cursor: 'pointer', maxWidth: 200 }}>
           <option value="all">All Companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -216,7 +229,10 @@ export default function Leads() {
                       {lead.answers && Object.keys(lead.answers).length > 0 ? (
                         <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.6 }}>
                           {Object.entries(lead.answers).slice(0, 2).map(([q, a]) => (
-                            <div key={q}><span style={{ color: 'var(--text3)' }}>{q.slice(0, 20)}:</span> <strong>{String(a).slice(0, 25)}</strong></div>
+                            <div key={q}>
+                              <span style={{ color: 'var(--text3)' }}>{q.slice(0, 20)}:</span>{' '}
+                              <strong>{String(a).slice(0, 25)}</strong>
+                            </div>
                           ))}
                           {Object.keys(lead.answers).length > 2 && (
                             <div style={{ color: 'var(--text3)' }}>+{Object.keys(lead.answers).length - 2} more</div>
@@ -227,22 +243,17 @@ export default function Leads() {
                       )}
                     </td>
 
-                    {/* Status */}
+                    {/* Status — Read only badge */}
                     <td style={{ padding: '12px 16px' }}>
-                      <select
-                        value={lead.status || 'new'}
-                        onChange={e => updateStatus(lead.id, e.target.value)}
-                        disabled={updatingStatus === lead.id}
-                        style={{
-                          padding: '5px 10px', borderRadius: 20,
-                          border: '1.5px solid ' + sc.color,
-                          background: sc.bg, color: sc.color,
-                          fontSize: 11, fontWeight: 600,
-                          cursor: 'pointer', fontFamily: 'inherit'
-                        }}
-                      >
-                        {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
+                      <span style={{
+                        padding: '4px 12px', borderRadius: 20,
+                        border: '1.5px solid ' + sc.color,
+                        background: sc.bg, color: sc.color,
+                        fontSize: 11, fontWeight: 600,
+                        display: 'inline-block', whiteSpace: 'nowrap'
+                      }}>
+                        {sc.label}
+                      </span>
                     </td>
 
                     {/* Date */}
