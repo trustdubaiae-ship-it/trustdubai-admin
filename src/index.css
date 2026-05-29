@@ -1,12 +1,65 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
-  --sidebar: #1a1a2e; --text: #202124; --text2: #5f6368; --text3: #9aa0a6;
-  --border: #e8eaed; --bg: #f8f9fa; --white: #fff;
-  --green: #1e8e3e; --green-light: #e6f4ea;
-  --red: #d93025; --red-light: #fce8e6;
-  --amber: #f9a825; --amber-light: #fef9e7;
-  --radius: 8px;
+
+:root[data-theme="light"], :root {
+  --primary: #03C1F5;
+  --primary-dark: #0290b8;
+  --primary-light: #e0f9ff;
+  --sidebar: #ffffff;
+  --sidebar-border: #e2e8f0;
+  --text: #0f172a;
+  --text2: #475569;
+  --text3: #94a3b8;
+  --border: #e2e8f0;
+  --bg: #f8fafc;
+  --bg2: #f1f5f9;
+  --card: #ffffff;
+  --white: #fff;
+  --green: #1e8e3e;
+  --green-light: #e6f4ea;
+  --red: #d93025;
+  --red-light: #fce8e6;
+  --amber: #e8b84b;
+  --amber-light: #fef9e7;
+  --radius: 10px;
+  --shadow: 0 1px 8px rgba(0,0,0,0.06);
 }
-body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
-button, input, select, textarea { font-family: 'DM Sans', sans-serif; }
+
+:root[data-theme="dark"] {
+  --primary: #03C1F5;
+  --primary-dark: #0290b8;
+  --primary-light: rgba(3,193,245,0.12);
+  --sidebar: #0f172a;
+  --sidebar-border: rgba(255,255,255,0.08);
+  --text: #f1f5f9;
+  --text2: #94a3b8;
+  --text3: #475569;
+  --border: rgba(255,255,255,0.08);
+  --bg: #0f172a;
+  --bg2: #1e293b;
+  --card: #1e293b;
+  --white: #1e293b;
+  --green: #34d399;
+  --green-light: rgba(52,211,153,0.12);
+  --red: #f87171;
+  --red-light: rgba(248,113,113,0.12);
+  --amber: #fbbf24;
+  --amber-light: rgba(251,191,36,0.12);
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.2s, color 0.2s;
+}
+
+button, input, select, textarea {
+  font-family: 'DM Sans', sans-serif;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
