@@ -8,36 +8,45 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
 
   const MENU = [
     { section: 'MAIN' },
-    { id: 'dashboard',         icon: 'ti-layout-dashboard',   label: 'Dashboard',          show: true },
-    { id: 'users',             icon: 'ti-users',              label: 'Customers',          show: isSuperAdmin },
-    { id: 'companies',         icon: 'ti-building-store',     label: 'Businesses',         show: canAccess('view_companies') },
-    { id: 'reviews',           icon: 'ti-star',               label: 'Reviews',            show: canAccess('view_reviews') },
-    { id: 'applications',      icon: 'ti-file-description',   label: 'Applications',       show: true, badge: '3', badgeColor: '#f87171' },
-    { id: 'leads',             icon: 'ti-address-book',       label: 'All Leads',          show: true },
-    { id: 'reports',           icon: 'ti-flag',               label: 'Reports',            show: true },
+    { id: 'dashboard',         icon: 'ti-layout-dashboard',  label: 'Dashboard',          show: true },
+    { id: 'users',             icon: 'ti-users',             label: 'Customers',          show: isSuperAdmin },
+    { id: 'companies',         icon: 'ti-building-store',    label: 'Businesses',         show: canAccess('view_companies') },
+    { id: 'reviews',           icon: 'ti-star',              label: 'Reviews',            show: canAccess('view_reviews') },
+    { id: 'applications',      icon: 'ti-file-description',  label: 'Applications',       show: true, badge: '3', badgeColor: '#f87171' },
+    { id: 'leads',             icon: 'ti-address-book',      label: 'All Leads',          show: true },
+    { id: 'reports',           icon: 'ti-flag',              label: 'Reports',            show: true },
+
     { section: 'MODERATION' },
-    { id: 'ai_moderation',     icon: 'ti-stack',              label: 'Mod Queue',          show: isSuperAdmin, badge: '12', badgeColor: '#fbbf24' },
-    { id: 'ai_moderation',     icon: 'ti-robot',              label: 'AI Moderation',      show: isSuperAdmin },
-    { id: 'applications',      icon: 'ti-shield-check',       label: 'Verification',       show: true },
-    { id: 'disputes',          icon: 'ti-alert-circle',       label: 'Disputes',           show: true, badge: '5', badgeColor: '#f87171' },
+    { id: 'ai_moderation',     icon: 'ti-stack',             label: 'Mod Queue',          show: isSuperAdmin, badge: '12', badgeColor: '#fbbf24' },
+    { id: 'ai_moderation',     icon: 'ti-robot',             label: 'AI Moderation',      show: isSuperAdmin },
+    { id: 'applications',      icon: 'ti-shield-check',      label: 'Verification',       show: true },
+    { id: 'disputes',          icon: 'ti-alert-circle',      label: 'Disputes',           show: true, badge: '5', badgeColor: '#f87171' },
+
     { section: 'ANALYTICS' },
-    { id: 'business_insights', icon: 'ti-chart-line',         label: 'Analytics',          show: true },
-    { id: 'trust_score',       icon: 'ti-heart-rate-monitor', label: 'Trust Monitor',      show: true },
-    { id: 'accounts',          icon: 'ti-chart-bar',          label: 'Business Insights',  show: isAccounts || isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-activity',           label: 'System Analytics',   show: isSuperAdmin },
+    { id: 'business_insights', icon: 'ti-chart-line',        label: 'Analytics',          show: true },
+    { id: 'trust_score',       icon: 'ti-heart-rate-monitor',label: 'Trust Monitor',      show: true },
+    { id: 'accounts',          icon: 'ti-chart-bar',         label: 'Business Insights',  show: isAccounts || isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-activity',          label: 'System Analytics',   show: isSuperAdmin },
+
+    { section: 'REVENUE' },
+    { id: 'sponsor_slots',     icon: 'ti-ad-2',              label: 'Sponsor Slots',      show: isSuperAdmin },
+    { id: 'plan_approvals',    icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
+    { id: 'accounts',          icon: 'ti-report-money',      label: 'Revenue',            show: isAccounts || isSuperAdmin },
+
     { section: 'MANAGEMENT' },
-    { id: 'categories',        icon: 'ti-tag',                label: 'Categories',         show: canAccess('manage_categories') },
-    { id: 'plans',             icon: 'ti-award',              label: 'Badges & Plans',     show: canAccess('manage_plans') },
-    { id: 'employees',         icon: 'ti-id-badge',           label: 'Employees',          show: canAccess('manage_employees') },
-    { id: 'notifications',     icon: 'ti-bell',               label: 'Notifications',      show: true },
-    { id: 'bulk',              icon: 'ti-file-spreadsheet',   label: 'Bulk Upload',        show: canAccess('bulk_upload') },
+    { id: 'categories',        icon: 'ti-tag',               label: 'Categories',         show: canAccess('manage_categories') },
+    { id: 'plans',             icon: 'ti-award',             label: 'Badges & Plans',     show: canAccess('manage_plans') },
+    { id: 'employees',         icon: 'ti-id-badge',          label: 'Employees',          show: canAccess('manage_employees') },
+    { id: 'notifications',     icon: 'ti-bell',              label: 'Notifications',      show: true },
+    { id: 'bulk',              icon: 'ti-file-spreadsheet',  label: 'Bulk Upload',        show: canAccess('bulk_upload') },
+
     { section: 'SYSTEM' },
-    { id: 'team',              icon: 'ti-crown',              label: 'Team',               show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-server',             label: 'System Health',      show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-settings',           label: 'Settings',           show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-lock',               label: 'Roles & Perms',      show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-notes',              label: 'Logs',               show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-api',                label: 'API Management',     show: isSuperAdmin },
+    { id: 'team',              icon: 'ti-crown',             label: 'Team',               show: isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-server',            label: 'System Health',      show: isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-settings',          label: 'Settings',           show: isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-lock',              label: 'Roles & Perms',      show: isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-notes',             label: 'Logs',               show: isSuperAdmin },
+    { id: 'system_health',     icon: 'ti-api',               label: 'API Management',     show: isSuperAdmin },
   ].filter(m => m.section || m.show)
 
   const SB = {
@@ -96,19 +105,20 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
       <nav style={{ flex:1, padding:'6px 0', overflowY:'auto' }}>
         {MENU.map((item, i) => {
           if (item.section) return (
-            <div key={i} style={{ fontSize:7.5, fontWeight:700, color:SB.section, letterSpacing:'0.08em', padding:'10px 16px 3px', textTransform:'uppercase' }}>
+            <div key={`section-${i}`} style={{ fontSize:7.5, fontWeight:700, color:SB.section, letterSpacing:'0.08em', padding:'10px 16px 3px', textTransform:'uppercase' }}>
               {item.section}
             </div>
           )
-          const isActive = page === item.id
+          const isActive = page === item.id && MENU.findIndex(m=>m.id===item.id&&m.label===item.label) === MENU.findIndex(m=>m.id===page&&!m.section)
+          const activeStyle = page === item.id
           return (
-            <div key={i} onClick={() => setPage(item.id)}
-              style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 16px', cursor:'pointer', background:isActive?SB.activeBg:'transparent', borderRight:isActive?`2px solid ${SB.activeColor}`:'2px solid transparent', transition:'all 0.15s' }}
-              onMouseEnter={e=>{ if(!isActive) e.currentTarget.style.background=SB.hoverBg }}
-              onMouseLeave={e=>{ if(!isActive) e.currentTarget.style.background='transparent' }}
+            <div key={`${item.id}-${i}`} onClick={() => setPage(item.id)}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 16px', cursor:'pointer', background:activeStyle&&MENU.filter(m=>m.id===item.id)[0]?.label===item.label?SB.activeBg:'transparent', borderRight:activeStyle&&MENU.filter(m=>m.id===item.id)[0]?.label===item.label?`2px solid ${SB.activeColor}`:'2px solid transparent', transition:'all 0.15s' }}
+              onMouseEnter={e=>{ if(page!==item.id) e.currentTarget.style.background=SB.hoverBg }}
+              onMouseLeave={e=>{ if(page!==item.id) e.currentTarget.style.background='transparent' }}
             >
-              <i className={`ti ${item.icon}`} style={{ fontSize:13, color:isActive?SB.activeColor:SB.muted, flexShrink:0 }}/>
-              <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?SB.activeColor:SB.itemColor, flex:1 }}>{item.label}</span>
+              <i className={`ti ${item.icon}`} style={{ fontSize:13, color:page===item.id?SB.activeColor:SB.muted, flexShrink:0 }}/>
+              <span style={{ fontSize:11, fontWeight:page===item.id?600:400, color:page===item.id?SB.activeColor:SB.itemColor, flex:1 }}>{item.label}</span>
               {item.badge && (
                 <span style={{ background:item.badgeColor+'25', color:item.badgeColor, fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:99 }}>{item.badge}</span>
               )}
