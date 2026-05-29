@@ -31,7 +31,6 @@ export default function App() {
   const [page,       setPage]       = useState('dashboard')
   const [planFilter, setPlanFilter] = useState('all')
 
-  // Always dark theme — force #0d1117
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark')
     document.body.style.background = '#0d1117'
@@ -73,51 +72,47 @@ export default function App() {
   const isSales      = adminData?.role === 'sales'    || isSuperAdmin
   const isAccounts   = adminData?.role === 'accounts' || isSuperAdmin
 
-  // ── Loading ──────────────────────────────────────────
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0d1117' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, background: 'linear-gradient(135deg, #0f6e56, #1d9e75)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0d1117' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginBottom:16 }}>
+          <div style={{ width:36, height:36, background:'linear-gradient(135deg,#0f6e56,#1d9e75)', borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L4 6V12C4 16.4 7.4 20.5 12 22C16.6 20.5 20 16.4 20 12V6L12 2Z" fill="rgba(255,255,255,0.15)" stroke="#4ade80" strokeWidth="1.5"/>
               <polyline points="8.5,12 11,14.5 15.5,10" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#f0fdf4', letterSpacing: '-0.3px' }}>
-            TRUST<span style={{ color: '#4ade80' }}>DUBAI</span>
+          <div style={{ fontSize:22, fontWeight:700, color:'#f0fdf4', letterSpacing:'-0.3px' }}>
+            TRUST<span style={{ color:'#4ade80' }}>DUBAI</span>
           </div>
         </div>
-        <div style={{ width: 36, height: 36, border: '3px solid #4ade80', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        <div style={{ fontSize: 13, color: '#374151' }}>Loading admin panel...</div>
+        <div style={{ width:36, height:36, border:'3px solid #4ade80', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <div style={{ fontSize:13, color:'#374151' }}>Loading admin panel...</div>
       </div>
     </div>
   )
 
-  // ── Not logged in ─────────────────────────────────────
   if (!session) return <Login />
 
-  // ── Not admin ─────────────────────────────────────────
   if (!isAdmin) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0d1117' }}>
-      <div style={{ textAlign: 'center', color: '#f0fdf4', padding: 40, background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 16 }}>
-        <div style={{ width: 56, height: 56, background: 'rgba(248,113,113,0.12)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-          <i className="ti ti-lock" style={{ fontSize: 28, color: '#f87171' }} />
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0d1117' }}>
+      <div style={{ textAlign:'center', color:'#f0fdf4', padding:40, background:'#161b22', border:'0.5px solid rgba(255,255,255,0.07)', borderRadius:16 }}>
+        <div style={{ width:56, height:56, background:'rgba(248,113,113,0.12)', borderRadius:16, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+          <i className="ti ti-lock" style={{ fontSize:28, color:'#f87171' }}/>
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#f0fdf4' }}>Access Denied</div>
-        <div style={{ fontSize: 13, color: '#374151', marginBottom: 24 }}>You are not authorized to access this panel.</div>
+        <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>Access Denied</div>
+        <div style={{ fontSize:13, color:'#374151', marginBottom:24 }}>You are not authorized to access this panel.</div>
         <button onClick={() => supabase.auth.signOut()}
-          style={{ padding: '10px 24px', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+          style={{ padding:'10px 24px', background:'rgba(248,113,113,0.12)', color:'#f87171', border:'0.5px solid rgba(248,113,113,0.2)', borderRadius:8, cursor:'pointer', fontSize:13 }}>
           Sign Out
         </button>
       </div>
     </div>
   )
 
-  // ── Main App ──────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0d1117' }}>
+    <div style={{ display:'flex', minHeight:'100vh', background:'#0d1117' }}>
       <Sidebar
         page={page}
         setPage={setPage}
@@ -127,7 +122,7 @@ export default function App() {
         theme="dark"
         setTheme={() => {}}
       />
-      <div style={{ flex: 1, marginLeft: 210, padding: 20, background: '#0d1117', minHeight: '100vh', overflowX: 'hidden' }}>
+      <div style={{ flex:1, marginLeft:210, padding:20, background:'#0d1117', minHeight:'100vh', overflowX:'hidden' }}>
         {page === 'dashboard'         && <Dashboard setPage={setPage} setPlanFilter={setPlanFilter} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
