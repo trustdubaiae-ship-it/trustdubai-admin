@@ -10,10 +10,17 @@ const PLANS = {
   platinum: { label: 'Platinum', color: '#8b5cf6', bg: '#f5f3ff' },
 }
 
+const PLAN_PRICES = {
+  free: 'AED 0',
+  silver: 'AED 149/mo',
+  gold: 'AED 349/mo',
+  platinum: 'AED 699/mo',
+}
+
 function Modal({ title, onClose, children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 480, maxHeight: '80vh', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 480, maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)' }}>×</button>
@@ -33,6 +40,24 @@ function Field({ label, value, onChange }) {
   )
 }
 
+function daysFromNow(days) {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString()
+}
+
+function formatExpiry(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMs = d - now
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return { label: 'Expired', color: '#ef4444', days: diffDays }
+  if (diffDays <= 7) return { label: diffDays + ' days left', color: '#f59e0b', days: diffDays }
+  if (diffDays <= 30) return { label: diffDays + ' days left', color: '#3b82f6', days: diffDays }
+  return { label: diffDays + ' days left', color: '#10b981', days: diffDays }
+}
+
 export default function Companies() {
   const [tab, setTab] = useState('approved')
   const [companies, setCompanies] = useState([])
@@ -40,6 +65,9 @@ export default function Companies() {
   const [editC, setEditC] = useState(null)
   const [addModal, setAddModal] = useState(false)
   const [planModal, setPlanModal] = useState(null)
+  const [selectedPlan, setSelectedPlan] = useState(null)
+  const [expiryDate, setExpiryDate] = useState('')
+  const [savingPlan, setSavingPlan] = useState(false)
   const [newC, setNewC] = useState({ name: '', category: '', area: '', phone: '', whatsapp: '', email: '', description: '' })
 
   useEffect(() => { fetchAll() }, [])
@@ -55,7 +83,6 @@ export default function Companies() {
     await supabase.from('companies').update(updates).eq('id', id)
     fetchAll()
     setEditC(null)
-    setPlanModal(null)
   }
 
   async function del(id) {
@@ -71,9 +98,38 @@ export default function Companies() {
     fetchAll()
   }
 
+  function openPlanModal(company) {
+    setPlanModal(company)
+    setSelectedPlan(company.plan || 'free')
+    // Default expiry: 30 days from now
+    const defaultExpiry = new Date()
+    defaultExpiry.setDate(defaultExpiry.getDate() + 30)
+    setExpiryDate(defaultExpiry.toISOString().split('T')[0])
+  }
+
+  async function savePlan() {
+    if (!planModal || !selectedPlan) return
+    setSavingPlan(true)
+
+    const updates = {
+      plan: selectedPlan,
+      plan_started_at: new Date().toISOString(),
+    }
+
+    if (selectedPlan === 'free') {
+      updates.plan_expires_at = null
+    } else {
+      updates.plan_expires_at = new Date(expiryDate + 'T23:59:59').toISOString()
+    }
+
+    await supabase.from('companies').update(updates).eq('id', planModal.id)
+    setSavingPlan(false)
+    setPlanModal(null)
+    fetchAll()
+  }
+
   const pending  = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
   const approved = companies.filter(c => c.status === 'approved')
-
   const displayList = tab === 'pending' ? pending : tab === 'approved' ? approved : companies
 
   const btn = (color, bg) => ({ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', color, background: bg })
@@ -105,16 +161,17 @@ export default function Companies() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
-                {['Company', 'Category', 'Area', 'Plan', 'Status', 'Actions'].map(h => (
+                {['Company', 'Category', 'Area', 'Plan', 'Expiry', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {displayList.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}>No companies</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}>No companies</td></tr>
               ) : displayList.map(c => {
                 const plan = PLANS[c.plan || 'free'] || PLANS.free
+                const expiry = formatExpiry(c.plan_expires_at)
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '12px 16px' }}>
@@ -127,6 +184,15 @@ export default function Companies() {
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>
                         {plan.label}
                       </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {c.plan === 'free' || !c.plan_expires_at ? (
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>—</span>
+                      ) : expiry ? (
+                        <span style={{ fontSize: 12, fontWeight: 500, color: expiry.color }}>
+                          {expiry.days < 0 ? '⚠️ ' : ''}{expiry.label}
+                        </span>
+                      ) : null}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -144,7 +210,7 @@ export default function Companies() {
                         <button onClick={() => update(c.id, { is_verified: !c.is_verified })} style={btn('var(--green)', 'var(--green-light)')}>
                           {c.is_verified ? 'Unverify' : 'Verify'}
                         </button>
-                        <button onClick={() => setPlanModal(c)} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: plan.bg, color: plan.color }}>
+                        <button onClick={() => openPlanModal(c)} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: plan.bg, color: plan.color }}>
                           Plan
                         </button>
                         <button onClick={() => del(c.id)} style={btn('var(--red)', 'var(--red-light)')}>Del</button>
@@ -163,24 +229,81 @@ export default function Companies() {
         <Modal title={'Change Plan — ' + planModal.name} onClose={() => setPlanModal(null)}>
           <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text2)' }}>
             Current plan: <strong style={{ color: PLANS[planModal.plan || 'free']?.color }}>{PLANS[planModal.plan || 'free']?.label}</strong>
+            {planModal.plan_expires_at && (
+              <span style={{ marginLeft: 8, fontSize: 12, color: formatExpiry(planModal.plan_expires_at)?.color }}>
+                · {formatExpiry(planModal.plan_expires_at)?.label}
+              </span>
+            )}
           </div>
+
+          {/* Plan selector */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
             {Object.entries(PLANS).map(([key, p]) => (
-              <div key={key} onClick={() => update(planModal.id, { plan: key })} style={{
-                padding: '14px', border: '2px solid ' + ((planModal.plan || 'free') === key ? p.color : 'var(--border)'),
-                borderRadius: 10, cursor: 'pointer', background: (planModal.plan || 'free') === key ? p.bg : '#fff',
+              <div key={key} onClick={() => setSelectedPlan(key)} style={{
+                padding: '14px', border: '2px solid ' + (selectedPlan === key ? p.color : 'var(--border)'),
+                borderRadius: 10, cursor: 'pointer', background: selectedPlan === key ? p.bg : '#fff',
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: p.color }}>{p.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                  {key === 'free' ? 'AED 0' : key === 'silver' ? 'AED 149/mo' : key === 'gold' ? 'AED 349/mo' : 'AED 699/mo'}
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{PLAN_PRICES[key]}</div>
               </div>
             ))}
           </div>
-          <button onClick={() => setPlanModal(null)} style={{ width: '100%', padding: 10, background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
-            Cancel
-          </button>
+
+          {/* Expiry date — only for paid plans */}
+          {selectedPlan && selectedPlan !== 'free' && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
+                Plan Expiry Date *
+              </label>
+
+              {/* Quick buttons */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                {[
+                  { label: '1 Month', days: 30 },
+                  { label: '3 Months', days: 90 },
+                  { label: '6 Months', days: 180 },
+                  { label: '1 Year', days: 365 },
+                ].map(({ label, days }) => (
+                  <button key={days} onClick={() => {
+                    const d = new Date()
+                    d.setDate(d.getDate() + days)
+                    setExpiryDate(d.toISOString().split('T')[0])
+                  }} style={{
+                    padding: '5px 12px', border: '1px solid var(--border)',
+                    borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                    background: '#fff', color: 'var(--text2)'
+                  }}>{label}</button>
+                ))}
+              </div>
+
+              <input
+                type="date"
+                value={expiryDate}
+                onChange={e => setExpiryDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none' }}
+              />
+
+              {expiryDate && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)' }}>
+                  Plan will expire on <strong>{new Date(expiryDate).toLocaleDateString('en-AE', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={savePlan} disabled={savingPlan || (selectedPlan !== 'free' && !expiryDate)} style={{
+              flex: 1, padding: 10, background: savingPlan ? 'var(--text3)' : 'var(--primary)',
+              color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer'
+            }}>
+              {savingPlan ? 'Saving...' : 'Save Plan'}
+            </button>
+            <button onClick={() => setPlanModal(null)} style={{ flex: 1, padding: 10, background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
         </Modal>
       )}
 
