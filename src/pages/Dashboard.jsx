@@ -25,9 +25,39 @@ function MiniSparkline({ data, color }) {
   const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ')
   return (
     <svg width={w} height={h} style={{ overflow: 'visible' }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
       <circle cx={(data.length - 1) / (data.length - 1) * w} cy={h - ((data[data.length - 1] - min) / range) * h} r="3" fill={color} />
     </svg>
+  )
+}
+
+function StatCard({ label, value, icon, color, bg, sub, trend, isRating }) {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  return (
+    <div style={{
+      background: isDark ? '#1e293b' : '#ffffff',
+      border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+      borderRadius: 16, padding: 20, position: 'relative', overflow: 'hidden',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+      boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.06)',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.06)' }}
+    >
+      <div style={{ position: 'absolute', top: -10, right: -10, width: 80, height: 80, background: color, borderRadius: '50%', opacity: 0.08 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid ' + color + '33' }}>
+          <i className={'ti ' + icon} style={{ fontSize: 20, color }} />
+        </div>
+        {trend && <MiniSparkline data={trend} color={color} />}
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 700, color: isDark ? '#f1f5f9' : '#0f172a', lineHeight: 1, letterSpacing: '-0.5px' }}>
+        {isRating ? value : <AnimatedNumber value={value} />}
+        {isRating && <span style={{ fontSize: 16, color: '#f9a825', marginLeft: 4 }}>★</span>}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 500, color: isDark ? '#94a3b8' : '#64748b', marginTop: 6 }}>{label}</div>
+      <div style={{ fontSize: 11, color, marginTop: 4, fontWeight: 500 }}>{sub}</div>
+    </div>
   )
 }
 
@@ -40,17 +70,22 @@ export default function Dashboard() {
   const [topCompanies, setTopCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [time, setTime] = useState(new Date())
+  const [, forceUpdate] = useState(0)
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
 
   useEffect(() => {
     fetchAll()
     const t = setInterval(() => setTime(new Date()), 1000)
-    return () => clearInterval(t)
+    // Re-render on theme change
+    const observer = new MutationObserver(() => forceUpdate(n => n + 1))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => { clearInterval(t); observer.disconnect() }
   }, [])
 
   async function fetchAll() {
     setLoading(true)
-    const [statsRes, plansRes, catsRes, regsRes, reviewsRes, topRes, empRes] = await Promise.all([
-      Promise.resolve(null),
+    const [plansRes, catsRes, regsRes, reviewsRes, topRes, empRes] = await Promise.all([
       supabase.from('companies').select('plan_name, is_verified, avg_rating, total_reviews'),
       supabase.from('companies').select('category').eq('status', 'approved'),
       supabase.from('company_registrations').select('*').order('submitted_at', { ascending: false }).limit(5),
@@ -74,7 +109,7 @@ export default function Dashboard() {
 
     setStats({
       total: totalRes.count || 0,
-      approved: companies.filter(c => c).length,
+      approved: companies.length,
       verified: companies.filter(c => c.is_verified).length,
       premium: companies.filter(c => c.plan_name && c.plan_name !== 'Free').length,
       today: todayRes.count || 0,
@@ -98,17 +133,29 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  const planColors = { Free: '#888', Silver: '#94a3b8', Gold: '#e8b84b', Platinum: '#8b5cf6' }
-  const planBgs = { Free: 'rgba(136,136,136,0.1)', Silver: 'rgba(148,163,184,0.1)', Gold: 'rgba(232,184,75,0.1)', Platinum: 'rgba(139,92,246,0.1)' }
+  const planColors = { Free: '#888', Silver: '#64748b', Gold: '#e8b84b', Platinum: '#8b5cf6' }
   const totalPlan = Object.values(planDist).reduce((a, b) => a + b, 0) || 1
+  const catColors = ['#1a73e8', '#1e8e3e', '#f9a825', '#d93025', '#9c27b0', '#00897b']
 
-  const catColors = ['#1a73e8','#1e8e3e','#f9a825','#d93025','#9c27b0','#00897b']
+  const card = (content) => ({
+    background: isDark ? '#1e293b' : '#ffffff',
+    border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+    borderRadius: 16, padding: 20,
+    boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.04)',
+  })
+
+  const text = isDark ? '#f1f5f9' : '#0f172a'
+  const textSub = isDark ? '#94a3b8' : '#64748b'
+  const textMuted = isDark ? '#475569' : '#94a3b8'
+  const bgRow = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
+  const borderCol = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⟳</div>
-        <div style={{ fontSize: 14, color: 'var(--text2)' }}>Loading dashboard...</div>
+        <div style={{ width: 40, height: 40, border: '3px solid #03C1F5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        <div style={{ fontSize: 14, color: textSub }}>Loading dashboard...</div>
       </div>
     </div>
   )
@@ -116,204 +163,218 @@ export default function Dashboard() {
   return (
     <div style={{ maxWidth: 1200 }}>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--text)' }}>Platform Dashboard</h1>
-          <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>
-            {new Date().toLocaleDateString('en-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: text, letterSpacing: '-0.3px' }}>Dashboard Overview</h1>
+          <p style={{ fontSize: 13, color: textSub, marginTop: 4 }}>
+            Monitor and manage the entire TrustDubai platform
           </p>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 28, fontWeight: 300, color: 'var(--primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>
+        <div style={{ textAlign: 'right', background: isDark ? '#1e293b' : '#fff', border: '1px solid ' + borderCol, borderRadius: 12, padding: '10px 16px' }}>
+          <div style={{ fontSize: 24, fontWeight: 300, color: '#03C1F5', fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>
             {time.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Dubai Time (GMT+4)</div>
+          <div style={{ fontSize: 11, color: textMuted, marginTop: 2 }}>
+            {new Date().toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+          <div style={{ fontSize: 10, color: textMuted }}>Dubai Time (GMT+4)</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
-        {[
-          { label: 'Total Companies', value: stats.total, icon: 'ti-building', color: '#1a73e8', bg: '#e8f0fe', sub: stats.today + ' added today', trend: [0, stats.thisMonth * 0.3, stats.thisMonth * 0.6, stats.thisMonth * 0.8, stats.thisMonth] },
-          { label: 'Verified Companies', value: stats.verified, icon: 'ti-shield-check', color: '#1e8e3e', bg: '#e6f4ea', sub: (stats.total ? Math.round(stats.verified / stats.total * 100) : 0) + '% of total' },
-          { label: 'Gold+ Members', value: stats.premium, icon: 'ti-diamond', color: '#e8b84b', bg: '#fffdf7', sub: (stats.total ? Math.round(stats.premium / stats.total * 100) : 0) + '% conversion' },
-          { label: 'Platform Rating', value: stats.avgRating, icon: 'ti-star', color: '#f9a825', bg: '#fef9e7', sub: stats.reviews + ' total reviews', isRating: true },
-        ].map((card, i) => (
-          <div key={i} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 18, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: card.bg, borderRadius: '0 14px 0 80px', opacity: 0.5 }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <i className={'ti ' + card.icon} style={{ fontSize: 20, color: card.color }} />
-              </div>
-              {card.trend && <MiniSparkline data={card.trend} color={card.color} />}
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--text)', lineHeight: 1 }}>
-              {card.isRating ? card.value : <AnimatedNumber value={card.value} />}
-              {card.isRating && <span style={{ fontSize: 14, color: '#f9a825', marginLeft: 4 }}>★</span>}
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginTop: 4 }}>{card.label}</div>
-            <div style={{ fontSize: 11, color: card.color, marginTop: 3 }}>{card.sub}</div>
-          </div>
-        ))}
+      {/* Top 4 stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 14 }}>
+        <StatCard label="Total Companies" value={stats.total} icon="ti-building" color="#1a73e8" bg="#e8f0fe" sub={stats.today + ' added today'} trend={[0, stats.thisMonth * 0.2, stats.thisMonth * 0.5, stats.thisMonth * 0.8, stats.thisMonth]} />
+        <StatCard label="Verified Companies" value={stats.verified} icon="ti-shield-check" color="#1e8e3e" bg="#e6f4ea" sub={(stats.total ? Math.round(stats.verified / stats.total * 100) : 0) + '% of total'} />
+        <StatCard label="Gold+ Members" value={stats.premium} icon="ti-diamond" color="#e8b84b" bg="#fffdf0" sub={(stats.total ? Math.round(stats.premium / stats.total * 100) : 0) + '% conversion'} />
+        <StatCard label="Platform Rating" value={stats.avgRating} icon="ti-star" color="#f9a825" bg="#fef9e7" sub={stats.reviews + ' total reviews'} isRating />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      {/* Secondary 4 stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Added Today', value: stats.today, icon: 'ti-calendar-plus', color: '#1a73e8' },
           { label: 'This Month', value: stats.thisMonth, icon: 'ti-trending-up', color: '#1e8e3e' },
           { label: 'Total Reviews', value: stats.reviews, icon: 'ti-message', color: '#d93025' },
           { label: 'Employees', value: stats.employees, icon: 'ti-users', color: '#00897b' },
-        ].map((card, i) => (
-          <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)' }}>
-              <i className={'ti ' + card.icon} style={{ fontSize: 18, color: card.color }} />
+        ].map((c, i) => (
+          <div key={i} style={{ background: isDark ? '#1e293b' : '#fff', border: '1px solid ' + borderCol, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDark ? 'none' : '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid ' + borderCol }}>
+              <i className={'ti ' + c.icon} style={{ fontSize: 18, color: c.color }} />
             </div>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 600 }}><AnimatedNumber value={card.value} /></div>
-              <div style={{ fontSize: 11, color: 'var(--text2)' }}>{card.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: text, lineHeight: 1 }}><AnimatedNumber value={c.value} /></div>
+              <div style={{ fontSize: 11, color: textSub, marginTop: 2 }}>{c.label}</div>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Plan + Category */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Plan Distribution</h3>
-            <span style={{ fontSize: 11, color: 'var(--text3)' }}>{stats.total} total</span>
+
+        {/* Plan Distribution */}
+        <div style={card()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Plan Distribution</h3>
+            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>{stats.total} total</span>
           </div>
           {Object.entries(planDist).map(([plan, count]) => (
-            <div key={plan} style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+            <div key={plan} style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: planColors[plan] }} />
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{plan}</span>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: planColors[plan] }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: text }}>{plan}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{count}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text3)', width: 36, textAlign: 'right' }}>{Math.round(count / totalPlan * 100)}%</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: text }}>{count}</span>
+                  <span style={{ fontSize: 11, color: textMuted, minWidth: 36, textAlign: 'right' }}>{Math.round(count / totalPlan * 100)}%</span>
                 </div>
               </div>
-              <div style={{ height: 8, background: 'var(--bg)', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: (count / totalPlan * 100) + '%', background: planColors[plan], borderRadius: 4, transition: 'width 1s ease' }} />
+              <div style={{ height: 7, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (count / totalPlan * 100) + '%', background: planColors[plan], borderRadius: 4, transition: 'width 1.2s ease' }} />
               </div>
             </div>
           ))}
-          <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, color: 'var(--text2)' }}>Revenue potential</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)' }}>
-              AED {(planDist.Silver * 299 + planDist.Gold * 699 + planDist.Platinum * 999).toLocaleString()}/mo
+          <div style={{ marginTop: 16, padding: '10px 14px', background: isDark ? 'rgba(3,193,245,0.08)' : '#f0fdff', borderRadius: 10, display: 'flex', justifyContent: 'space-between', border: '1px solid ' + (isDark ? 'rgba(3,193,245,0.15)' : '#bae6fd') }}>
+            <span style={{ fontSize: 12, color: textSub }}>Revenue potential</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#03C1F5' }}>
+              AED {(planDist.Silver * 149 + planDist.Gold * 349 + planDist.Platinum * 699).toLocaleString()}/mo
             </span>
           </div>
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Category Distribution</h3>
-            <span style={{ fontSize: 11, color: 'var(--text3)' }}>Live companies</span>
+        {/* Category Distribution */}
+        <div style={card()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Category Distribution</h3>
+            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>Live companies</span>
           </div>
           {catDist.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 20 }}>No data yet</p>
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <i className="ti ti-chart-donut" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
+              <p style={{ color: textMuted, fontSize: 13 }}>No data yet</p>
+            </div>
           ) : catDist.map(([cat, count], i) => (
-            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: catColors[i], flexShrink: 0 }} />
-              <span style={{ fontSize: 13, flex: 1, color: 'var(--text)' }}>{cat}</span>
-              <div style={{ width: 80, height: 6, background: 'var(--bg)', borderRadius: 3 }}>
-                <div style={{ height: '100%', width: (count / Math.max(...catDist.map(c => c[1])) * 100) + '%', background: catColors[i], borderRadius: 3 }} />
+              <span style={{ fontSize: 13, flex: 1, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+              <div style={{ width: 90, height: 6, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (count / Math.max(...catDist.map(c => c[1])) * 100) + '%', background: catColors[i], borderRadius: 3, transition: 'width 1s' }} />
               </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', minWidth: 20, textAlign: 'right' }}>{count}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: text, minWidth: 20, textAlign: 'right' }}>{count}</span>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Recent Registrations + Top Rated */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
+
+        {/* Recent Registrations */}
+        <div style={card()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Recent Registrations</h3>
-            <span style={{ background: recentRegs.filter(r => r.status === 'pending').length > 0 ? '#fef9e7' : 'var(--green-light)', color: recentRegs.filter(r => r.status === 'pending').length > 0 ? '#f9a825' : 'var(--green)', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Recent Registrations</h3>
+            <span style={{
+              background: recentRegs.filter(r => r.status === 'pending').length > 0 ? (isDark ? 'rgba(232,184,75,0.15)' : '#fef9e7') : (isDark ? 'rgba(30,142,62,0.15)' : '#e6f4ea'),
+              color: recentRegs.filter(r => r.status === 'pending').length > 0 ? '#e8b84b' : '#1e8e3e',
+              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20
+            }}>
               {recentRegs.filter(r => r.status === 'pending').length} pending
             </span>
           </div>
           {recentRegs.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 20 }}>No registrations yet</p>
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <i className="ti ti-clipboard-list" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
+              <p style={{ color: textMuted, fontSize: 13 }}>No registrations yet</p>
+            </div>
           ) : recentRegs.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--primary)', flexShrink: 0 }}>
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid ' + borderCol }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#03C1F5', flexShrink: 0 }}>
                 {r.company_name?.charAt(0).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{r.category} · {r.area}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                <div style={{ fontSize: 11, color: textSub }}>{r.category} · {r.area}</div>
               </div>
-              <span style={{ background: r.status === 'pending' ? '#fef9e7' : 'var(--green-light)', color: r.status === 'pending' ? '#f9a825' : 'var(--green)', fontSize: 10, padding: '2px 7px', borderRadius: 8, flexShrink: 0 }}>
-                {r.status}
-              </span>
+              <span style={{
+                background: r.status === 'pending' ? (isDark ? 'rgba(232,184,75,0.15)' : '#fef9e7') : (isDark ? 'rgba(30,142,62,0.15)' : '#e6f4ea'),
+                color: r.status === 'pending' ? '#e8b84b' : '#1e8e3e',
+                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 8, flexShrink: 0
+              }}>{r.status}</span>
             </div>
           ))}
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
+        {/* Top Rated Companies */}
+        <div style={card()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Top Rated Companies</h3>
-            <span style={{ fontSize: 11, color: 'var(--text3)' }}>By rating</span>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Top Rated Companies</h3>
+            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>By rating</span>
           </div>
           {topCompanies.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 20 }}>No companies yet</p>
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <i className="ti ti-trophy" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
+              <p style={{ color: textMuted, fontSize: 13 }}>No companies yet</p>
+            </div>
           ) : topCompanies.map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: i === 0 ? '#fef9e7' : 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? '#f9a825' : 'var(--text3)', flexShrink: 0 }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid ' + borderCol }}>
+              <div style={{ width: 26, height: 26, borderRadius: '50%', background: i === 0 ? (isDark ? 'rgba(232,184,75,0.2)' : '#fef9e7') : bgRow, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? '#e8b84b' : textMuted, flexShrink: 0, border: '1px solid ' + borderCol }}>
                 {i + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
                   {c.name}
-                  {c.is_verified && (
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                      <rect x="3" y="3" width="14" height="14" rx="3" transform="rotate(45 10 10)" fill="#1e8e3e"/>
-                      <path d="M6.5 10L8.8 12.3L13.5 7.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
+                  {c.is_verified && <i className="ti ti-rosette-discount-check" style={{ fontSize: 14, color: '#1e8e3e' }} />}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{c.category} · {c.total_reviews || 0} reviews</div>
+                <div style={{ fontSize: 11, color: textSub }}>{c.category} · {c.total_reviews || 0} reviews</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                <span style={{ color: '#f9a825', fontSize: 13 }}>★</span>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{c.avg_rating || '0.0'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: isDark ? 'rgba(249,168,37,0.1)' : '#fef9e7', padding: '3px 8px', borderRadius: 8 }}>
+                <span style={{ color: '#f9a825', fontSize: 12 }}>★</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#e8b84b' }}>{c.avg_rating || '0.0'}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, padding: 20 }}>
+      {/* Latest Reviews */}
+      <div style={card()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600 }}>Latest Reviews</h3>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Last 5</span>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Latest Reviews</h3>
+          <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>Last 5</span>
         </div>
         {recentReviews.length === 0 ? (
-          <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 20 }}>No reviews yet</p>
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <i className="ti ti-message" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
+            <p style={{ color: textMuted, fontSize: 13 }}>No reviews yet</p>
+          </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
             {recentReviews.map(r => (
-              <div key={r.id} style={{ background: 'var(--bg)', borderRadius: 10, padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ color: '#f9a825', fontSize: 14 }}>{'★'.repeat(r.rating)}<span style={{ color: 'var(--border)' }}>{'★'.repeat(5 - r.rating)}</span></span>
-                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(r.created_at).toLocaleDateString('en-AE', { month: 'short', day: 'numeric' })}</span>
+              <div key={r.id} style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 12, padding: 14, border: '1px solid ' + borderCol }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ color: '#f9a825', fontSize: 13 }}>
+                    {'★'.repeat(r.rating)}<span style={{ color: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0' }}>{'★'.repeat(5 - r.rating)}</span>
+                  </span>
+                  <span style={{ fontSize: 10, color: textMuted }}>{new Date(r.created_at).toLocaleDateString('en-AE', { month: 'short', day: 'numeric' })}</span>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companies?.name || 'Unknown'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text2)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.review_text}</div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>— {r.reviewer_name}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: text, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companies?.name || 'Unknown'}</div>
+                <div style={{ fontSize: 11, color: textSub, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.5 }}>{r.review_text}</div>
+                <div style={{ fontSize: 10, color: textMuted, marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + borderCol }}>— {r.reviewer_name}</div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <button onClick={fetchAll} style={{ padding: '8px 20px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 20, fontSize: 12, color: 'var(--text2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      {/* Refresh */}
+      <div style={{ textAlign: 'center', marginTop: 20 }}>
+        <button onClick={fetchAll} style={{ padding: '9px 22px', background: isDark ? 'rgba(3,193,245,0.1)' : '#f0fdff', border: '1px solid ' + (isDark ? 'rgba(3,193,245,0.2)' : '#bae6fd'), borderRadius: 20, fontSize: 12, color: '#03C1F5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
           <i className="ti ti-refresh" style={{ fontSize: 14 }} /> Refresh Data
         </button>
       </div>
+
     </div>
   )
 }
