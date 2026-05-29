@@ -71,7 +71,7 @@ Reason: ${reason || 'Does not meet our listing requirements'}
 ${checklistSection}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-You are welcome to re-apply once the issues have been resolved. If you believe this decision was made in error, please contact us with supporting documents.
+You are welcome to re-apply once the issues have been resolved.
 
 Regards,
 The TrustDubai Team
@@ -112,20 +112,20 @@ const statusBg    = { accepted: '#ecfdf5', rejected: '#fef2f2', pending: '#f9faf
 const statusLabel = { accepted: '✓ OK', rejected: '✗ Reject', pending: '— Pending' }
 
 export default function ApplicationsPage() {
-  const [apps, setApps]                   = useState([])
-  const [loading, setLoading]             = useState(true)
-  const [filter, setFilter]               = useState('pending')
+  const [apps, setApps]                     = useState([])
+  const [loading, setLoading]               = useState(true)
+  const [filter, setFilter]                 = useState('pending')
   const [priorityFilter, setPriorityFilter] = useState('all')
-  const [rejectingId, setRejectingId]     = useState(null)
-  const [rejectReason, setRejectReason]   = useState('')
-  const [processing, setProcessing]       = useState(false)
-  const [reviewMode, setReviewMode]       = useState('easy')
-  const [checklists, setChecklists]       = useState({})
-  const [clNotes, setClNotes]             = useState({})
-  const [socials, setSocials]             = useState({})
-  const [priorities, setPriorities]       = useState({})
-  const [expandedId, setExpandedId]       = useState(null)
-  const [emailModal, setEmailModal]       = useState(null)
+  const [rejectingId, setRejectingId]       = useState(null)
+  const [rejectReason, setRejectReason]     = useState('')
+  const [processing, setProcessing]         = useState(false)
+  const [reviewMode, setReviewMode]         = useState('easy')
+  const [checklists, setChecklists]         = useState({})
+  const [clNotes, setClNotes]               = useState({})
+  const [socials, setSocials]               = useState({})
+  const [priorities, setPriorities]         = useState({})
+  const [expandedId, setExpandedId]         = useState(null)
+  const [emailModal, setEmailModal]         = useState(null)
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
 
@@ -206,12 +206,56 @@ export default function ApplicationsPage() {
   async function approve(app) {
     setProcessing(true)
     const cl = checklists[app.id] || {}
+
+    // Auto generate slug from company name
+    const slug = app.company_name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
+    // 1. Update application status
     const { error } = await supabase.from('company_applications').update({
-      status: 'approved', reviewed_at: new Date().toISOString(),
-      checklist_results: cl, checklist_notes: clNotes[app.id] || {},
-      social_verification: socials[app.id] || {}, reviewed_by: 'Admin',
+      status: 'approved',
+      reviewed_at: new Date().toISOString(),
+      checklist_results: cl,
+      checklist_notes: clNotes[app.id] || {},
+      social_verification: socials[app.id] || {},
+      reviewed_by: 'Admin',
     }).eq('id', app.id)
+
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
+
+    // 2. Check if company already exists by email
+    const { data: existing } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('owner_email', app.email)
+      .maybeSingle()
+
+    if (!existing) {
+      // 3. Insert into companies table with slug
+      const { error: insertError } = await supabase.from('companies').insert({
+        name: app.company_name,
+        category: app.category || '',
+        location: app.location || '',
+        area: app.location || '',
+        phone: app.phone || '',
+        whatsapp: app.whatsapp || app.phone || '',
+        email: app.email || '',
+        owner_email: app.email || '',
+        description: app.description || '',
+        website: app.website || '',
+        slug,
+        status: 'approved',
+        plan: 'free',
+        is_verified: false,
+        created_at: new Date().toISOString(),
+      })
+      if (insertError) {
+        alert('Application approved but company insert failed: ' + insertError.message)
+      }
+    }
+
     setProcessing(false)
     const tpl = buildApprovalEmail(app)
     setEmailModal({ app, type: 'approval', ...tpl })
@@ -243,8 +287,6 @@ export default function ApplicationsPage() {
   const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb'
 
   const filteredApps = priorityFilter === 'all' ? apps : apps.filter(a => (priorities[a.id] || 'low') === priorityFilter)
-
-  // Priority counts
   const priorityCounts = { high: 0, medium: 0, low: 0 }
   apps.forEach(a => { const p = priorities[a.id] || 'low'; priorityCounts[p]++ })
 
@@ -259,11 +301,7 @@ export default function ApplicationsPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 13, color: textSub }}>Mode:</span>
-          <button onClick={toggleReviewMode} style={{
-            padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-            background: reviewMode === 'strict' ? (isDark ? 'rgba(251,191,36,0.15)' : '#fef3c7') : (isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe'),
-            color: reviewMode === 'strict' ? '#f59e0b' : '#3b82f6',
-          }}>
+          <button onClick={toggleReviewMode} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: reviewMode === 'strict' ? (isDark ? 'rgba(251,191,36,0.15)' : '#fef3c7') : (isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe'), color: reviewMode === 'strict' ? '#f59e0b' : '#3b82f6' }}>
             {reviewMode === 'strict' ? '🔒 Strict' : '✓ Easy'}
           </button>
         </div>
@@ -273,10 +311,8 @@ export default function ApplicationsPage() {
       {filter === 'pending' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
           {Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => (
-            <div key={key}
-              onClick={() => setPriorityFilter(priorityFilter === key ? 'all' : key)}
-              style={{ background: priorityFilter === key ? cfg.bg : cardBg, border: '2px solid ' + (priorityFilter === key ? cfg.border : borderCol), borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s' }}
-            >
+            <div key={key} onClick={() => setPriorityFilter(priorityFilter === key ? 'all' : key)}
+              style={{ background: priorityFilter === key ? cfg.bg : cardBg, border: '2px solid ' + (priorityFilter === key ? cfg.border : borderCol), borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s' }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: cfg.color }}>{priorityCounts[key]}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: text }}>{cfg.label}</div>
               <div style={{ fontSize: 11, color: textSub }}>{cfg.desc}</div>
@@ -288,12 +324,8 @@ export default function ApplicationsPage() {
       {/* Filter Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid ' + borderCol }}>
         {['pending', 'approved', 'rejected'].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
-            fontWeight: 500, fontSize: 13, textTransform: 'capitalize',
-            borderBottom: filter === f ? '2px solid #03C1F5' : '2px solid transparent',
-            color: filter === f ? '#03C1F5' : textSub,
-          }}>{f} ({f === 'pending' ? apps.filter((_, i) => filter === 'pending').length : ''})
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 13, textTransform: 'capitalize', borderBottom: filter === f ? '2px solid #03C1F5' : '2px solid transparent', color: filter === f ? '#03C1F5' : textSub }}>
+            {f}
           </button>
         ))}
       </div>
@@ -365,12 +397,12 @@ function AppCard({
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb'
   const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb'
 
-  const allAccepted    = CHECKLIST_FIELDS.every(f => checklist[f.key] === 'accepted')
-  const rejectedFields = CHECKLIST_FIELDS.filter(f => checklist[f.key] === 'rejected')
-  const pendingFields  = CHECKLIST_FIELDS.filter(f => checklist[f.key] === 'pending')
+  const allAccepted     = CHECKLIST_FIELDS.every(f => checklist[f.key] === 'accepted')
+  const rejectedFields  = CHECKLIST_FIELDS.filter(f => checklist[f.key] === 'rejected')
+  const pendingFields   = CHECKLIST_FIELDS.filter(f => checklist[f.key] === 'pending')
   const verifiedSocials = SOCIAL_FIELDS.filter(f => social[f.key]?.verified).length
   const tlUrl = 'https://ribdorraxxhfbfkjhpie.supabase.co/storage/v1/object/public/trade-licenses/' + app.tl_pdf_url
-  const pCfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.low
+  const pCfg  = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.low
 
   return (
     <div style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 14, padding: 20, boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -380,46 +412,24 @@ function AppCard({
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: text }}>{app.company_name}</div>
-            {/* Priority Badge */}
-            <span style={{ background: pCfg.bg, color: pCfg.color, fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, border: '1px solid ' + pCfg.border }}>
-              {pCfg.label}
-            </span>
+            <span style={{ background: pCfg.bg, color: pCfg.color, fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, border: '1px solid ' + pCfg.border }}>{pCfg.label}</span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {[app.category, app.location].filter(Boolean).map(t => (
               <span key={t} style={{ background: isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6', color: isDark ? '#94a3b8' : '#374151', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>{t}</span>
             ))}
-            {verifiedSocials > 0 && (
-              <span style={{ background: isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5', color: '#10b981', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>
-                ✓ {verifiedSocials} Social Verified
-              </span>
-            )}
-            {rejectedFields.length > 0 && (
-              <span style={{ background: isDark ? 'rgba(239,68,68,0.15)' : '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>
-                ✗ {rejectedFields.length} Field{rejectedFields.length > 1 ? 's' : ''} Rejected
-              </span>
-            )}
-            {pendingFields.length > 0 && filter === 'pending' && (
-              <span style={{ background: isDark ? 'rgba(156,163,175,0.15)' : '#f9fafb', color: textMuted, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>
-                ⏳ {pendingFields.length} Pending
-              </span>
-            )}
+            {verifiedSocials > 0 && <span style={{ background: isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5', color: '#10b981', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>✓ {verifiedSocials} Social Verified</span>}
+            {rejectedFields.length > 0 && <span style={{ background: isDark ? 'rgba(239,68,68,0.15)' : '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>✗ {rejectedFields.length} Rejected</span>}
+            {pendingFields.length > 0 && filter === 'pending' && <span style={{ background: isDark ? 'rgba(156,163,175,0.15)' : '#f9fafb', color: textMuted, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>⏳ {pendingFields.length} Pending</span>}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <span style={{ fontSize: 11, color: textMuted }}>{new Date(app.applied_at).toLocaleDateString('en-AE')}</span>
           {app.reviewed_by && <span style={{ fontSize: 11, color: textSub }}>By: {app.reviewed_by}</span>}
-
-          {/* Priority Selector — only for pending */}
           {filter === 'pending' && (
             <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
               {Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => (
-                <button key={key} onClick={() => onPriorityChange(key)} style={{
-                  width: 28, height: 28, borderRadius: '50%', border: '2px solid ' + (priority === key ? cfg.color : borderCol),
-                  background: priority === key ? cfg.bg : 'transparent',
-                  cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  title: cfg.label,
-                }} title={cfg.label}>
+                <button key={key} onClick={() => onPriorityChange(key)} title={cfg.label} style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid ' + (priority === key ? cfg.color : borderCol), background: priority === key ? cfg.bg : 'transparent', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {key === 'high' ? '🔴' : key === 'medium' ? '🟡' : '🟢'}
                 </button>
               ))}
@@ -428,26 +438,24 @@ function AppCard({
         </div>
       </div>
 
-      {/* Pending Document Notes — always visible */}
+      {/* Pending Document Notes */}
       {filter === 'pending' && (rejectedFields.length > 0 || pendingFields.length > 0) && (
         <div style={{ background: isDark ? 'rgba(239,68,68,0.08)' : '#fff7f7', border: '1px solid ' + (isDark ? 'rgba(239,68,68,0.2)' : '#fca5a5'), borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', marginBottom: 8 }}>📋 Pending Document Notes</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {rejectedFields.map(f => (
-              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                <span style={{ color: '#ef4444', fontWeight: 600 }}>✗</span>
-                <span style={{ color: text, fontWeight: 500 }}>{f.icon} {f.label}</span>
-                {clNote[f.key] && <span style={{ color: textSub }}>— {clNote[f.key]}</span>}
-              </div>
-            ))}
-            {pendingFields.map(f => (
-              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                <span style={{ color: textMuted, fontWeight: 600 }}>⏳</span>
-                <span style={{ color: textSub }}>{f.icon} {f.label}</span>
-                {clNote[f.key] && <span style={{ color: textMuted }}>— {clNote[f.key]}</span>}
-              </div>
-            ))}
-          </div>
+          {rejectedFields.map(f => (
+            <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: '#ef4444', fontWeight: 600 }}>✗</span>
+              <span style={{ color: text, fontWeight: 500 }}>{f.icon} {f.label}</span>
+              {clNote[f.key] && <span style={{ color: textSub }}>— {clNote[f.key]}</span>}
+            </div>
+          ))}
+          {pendingFields.map(f => (
+            <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 4 }}>
+              <span style={{ color: textMuted, fontWeight: 600 }}>⏳</span>
+              <span style={{ color: textSub }}>{f.icon} {f.label}</span>
+              {clNote[f.key] && <span style={{ color: textMuted }}>— {clNote[f.key]}</span>}
+            </div>
+          ))}
         </div>
       )}
 
@@ -468,7 +476,7 @@ function AppCard({
               <div style={{ fontSize: 11, color: textMuted, marginBottom: 2 }}>{l}</div>
               <div style={{ fontSize: 13, fontWeight: 500, color: expired ? '#ef4444' : text }}>
                 {v}
-                {expired    && <span style={{ marginLeft: 6, fontSize: 10, color: '#ef4444', fontWeight: 700 }}>EXPIRED</span>}
+                {expired && <span style={{ marginLeft: 6, fontSize: 10, color: '#ef4444', fontWeight: 700 }}>EXPIRED</span>}
                 {isExpiring && !expired && <span style={{ marginLeft: 6, fontSize: 10, color: '#f59e0b', fontWeight: 700 }}>EXPIRING SOON</span>}
               </div>
             </div>
@@ -494,7 +502,7 @@ function AppCard({
 
       {/* Rejection Reason */}
       {app.rejection_reason && (
-        <div style={{ background: isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2', border: '1px solid ' + (isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.2)'), borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#ef4444' }}>
+        <div style={{ background: isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#ef4444' }}>
           <strong>Rejection reason:</strong> {app.rejection_reason}
         </div>
       )}
@@ -512,19 +520,14 @@ function AppCard({
 
           {isExpanded && (
             <div style={{ border: '1px solid ' + borderCol, borderRadius: 10, overflow: 'hidden' }}>
-              {/* Tabs */}
               <div style={{ display: 'flex', borderBottom: '1px solid ' + borderCol, background: bgRow }}>
                 {[{ id: 'checklist', label: '📋 Document Checklist' }, { id: 'social', label: '🌐 Social Media' }].map(tab => (
-                  <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-                    padding: '10px 20px', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500,
-                    color: activeTab === tab.id ? text : textSub,
-                    background: activeTab === tab.id ? cardBg : 'transparent',
-                    border: 'none', borderBottom: activeTab === tab.id ? '2px solid #03C1F5' : '2px solid transparent', cursor: 'pointer',
-                  }}>{tab.label}</button>
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '10px 20px', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, color: activeTab === tab.id ? text : textSub, background: activeTab === tab.id ? cardBg : 'transparent', border: 'none', borderBottom: activeTab === tab.id ? '2px solid #03C1F5' : '2px solid transparent', cursor: 'pointer' }}>
+                    {tab.label}
+                  </button>
                 ))}
               </div>
 
-              {/* Checklist Tab */}
               {activeTab === 'checklist' && (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
@@ -536,8 +539,8 @@ function AppCard({
                   </thead>
                   <tbody>
                     {CHECKLIST_FIELDS.map(({ key, label, icon, checkExpiry }) => {
-                      const s   = checklist[key] ?? 'pending'
-                      const val = getFieldValue(app, key)
+                      const s    = checklist[key] ?? 'pending'
+                      const val  = getFieldValue(app, key)
                       const warn = checkExpiry && isExpiryWarning(app.tl_expiry_date)
                       const exp  = checkExpiry && isExpired(app.tl_expiry_date)
                       return (
@@ -549,9 +552,7 @@ function AppCard({
                             {warn && !exp && <span style={{ marginLeft: 6, fontSize: 10, background: isDark ? 'rgba(245,158,11,0.2)' : '#fffbeb', color: '#f59e0b', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>EXPIRING SOON</span>}
                           </td>
                           <td style={{ padding: '8px 12px' }}>
-                            <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500, background: statusBg[s], color: statusColor[s] }}>
-                              {statusLabel[s]}
-                            </span>
+                            <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500, background: statusBg[s], color: statusColor[s] }}>{statusLabel[s]}</span>
                           </td>
                           <td style={{ padding: '8px 12px' }}>
                             <button onClick={() => onCycleStatus(key)} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid ' + borderCol, background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', color: text, fontSize: 12, cursor: 'pointer' }}>
@@ -568,7 +569,6 @@ function AppCard({
                 </table>
               )}
 
-              {/* Social Tab */}
               {activeTab === 'social' && (
                 <div style={{ padding: 16 }}>
                   <p style={{ fontSize: 12, color: textMuted, marginBottom: 14 }}>Enter and verify the business's social media presence.</p>
@@ -579,9 +579,7 @@ function AppCard({
                         <div key={key} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto auto', alignItems: 'center', gap: 10, padding: '10px 12px', background: sv.verified ? (isDark ? 'rgba(16,185,129,0.08)' : '#f0fdf4') : bgRow, borderRadius: 8, border: '1px solid ' + (sv.verified ? (isDark ? 'rgba(16,185,129,0.2)' : '#a7f3d0') : borderCol) }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: text }}>{icon} {label}</div>
                           <input type="text" value={sv.value} onChange={e => onSocialValue(key, e.target.value)} placeholder={placeholder} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid ' + borderCol, fontSize: 13, outline: 'none', background: isDark ? 'rgba(255,255,255,0.05)' : 'white', color: text }} />
-                          {sv.value && (
-                            <a href={sv.value.startsWith('http') ? sv.value : '#'} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none', whiteSpace: 'nowrap' }}>🔗 Open</a>
-                          )}
+                          {sv.value && <a href={sv.value.startsWith('http') ? sv.value : '#'} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none', whiteSpace: 'nowrap' }}>🔗 Open</a>}
                           <button onClick={() => onToggleSocialVerified(key)} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', background: sv.verified ? '#10b981' : (isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb'), color: sv.verified ? 'white' : textSub }}>
                             {sv.verified ? '✓ Verified' : 'Mark Verified'}
                           </button>
@@ -589,9 +587,7 @@ function AppCard({
                       )
                     })}
                   </div>
-                  <button onClick={onSaveSocials} style={{ marginTop: 14, padding: '8px 18px', background: '#03C1F5', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                    💾 Save Social Verification
-                  </button>
+                  <button onClick={onSaveSocials} style={{ marginTop: 14, padding: '8px 18px', background: '#03C1F5', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>💾 Save Social Verification</button>
                 </div>
               )}
             </div>
@@ -616,7 +612,7 @@ function AppCard({
             <button onClick={onApprove} disabled={processing || !canApprove} style={{ padding: '9px 20px', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: canApprove ? 'pointer' : 'not-allowed', background: canApprove ? '#10b981' : (isDark ? 'rgba(255,255,255,0.1)' : '#d1d5db'), color: canApprove ? 'white' : textMuted }}>
               ✅ Approve
             </button>
-            <button onClick={onStartReject} style={{ padding: '9px 20px', background: isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2', color: '#ef4444', border: '1px solid ' + (isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.3)'), borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={onStartReject} style={{ padding: '9px 20px', background: isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               ❌ Reject
             </button>
             {!canApprove && reviewMode === 'strict' && <span style={{ fontSize: 12, color: textMuted }}>All fields must be accepted first</span>}
@@ -651,9 +647,7 @@ function EmailModal({ app, type, subject, body, onClose }) {
       <div style={{ background: isDark ? '#1e293b' : 'white', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb') }}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb'), display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isApproval ? (isDark ? 'rgba(16,185,129,0.1)' : '#f0fdf4') : (isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2'), borderRadius: '16px 16px 0 0' }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: isDark ? '#f1f5f9' : '#111827', marginBottom: 2 }}>
-              {isApproval ? '✅ Approval Email Ready' : '❌ Rejection Email Ready'}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: isDark ? '#f1f5f9' : '#111827', marginBottom: 2 }}>{isApproval ? '✅ Approval Email Ready' : '❌ Rejection Email Ready'}</div>
             <div style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#6b7280' }}>To: {app.company_name} — {app.email || 'No email on file'}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: isDark ? '#94a3b8' : '#9ca3af' }}>✕</button>
@@ -668,9 +662,7 @@ function EmailModal({ app, type, subject, body, onClose }) {
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb'), display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={handleMailto} style={{ padding: '9px 20px', background: isApproval ? '#10b981' : '#ef4444', color: 'white', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>📧 Open in Mail App</button>
-          <button onClick={handleCopy} style={{ padding: '9px 20px', background: isDark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', color: isDark ? '#f1f5f9' : '#374151', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-            {copied ? '✓ Copied!' : '📋 Copy Email'}
-          </button>
+          <button onClick={handleCopy} style={{ padding: '9px 20px', background: isDark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', color: isDark ? '#f1f5f9' : '#374151', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>{copied ? '✓ Copied!' : '📋 Copy Email'}</button>
           {sent && <span style={{ fontSize: 13, color: '#10b981', fontWeight: 500 }}>✓ Email client opened</span>}
           <button onClick={onClose} style={{ marginLeft: 'auto', padding: '9px 16px', background: 'none', color: isDark ? '#94a3b8' : '#9ca3af', border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb'), borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Skip</button>
         </div>
@@ -678,8 +670,6 @@ function EmailModal({ app, type, subject, body, onClose }) {
     </div>
   )
 }
-
-const thStyle = { padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }
 
 function getFieldValue(app, key) {
   const map = {
