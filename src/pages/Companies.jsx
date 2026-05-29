@@ -4,23 +4,23 @@ import { supabase } from '../supabase'
 const CATS = ['Interior Design','Renovation','Technical Contracting','Fit-Out','AC Service','Plumbing','Electrical','Cleaning','Painting','Handyman','Restaurant','Gym','Medical','Legal','Salon','Hotel','Other']
 
 const PLANS = {
-  free:     { label: 'Free',     color: '#6b7280', bg: '#f3f4f6' },
-  silver:   { label: 'Silver',   color: '#94a3b8', bg: '#f1f5f9' },
-  gold:     { label: 'Gold',     color: '#e8b84b', bg: '#fffdf7' },
-  platinum: { label: 'Platinum', color: '#8b5cf6', bg: '#f5f3ff' },
+  free:     { label: 'Free',     color: '#6b7280', bg: '#f3f4f6', price: 0 },
+  silver:   { label: 'Silver',   color: '#94a3b8', bg: '#f1f5f9', price: 149 },
+  gold:     { label: 'Gold',     color: '#e8b84b', bg: '#fffdf7', price: 349 },
+  platinum: { label: 'Platinum', color: '#8b5cf6', bg: '#f5f3ff', price: 699 },
 }
 
-const PLAN_PRICES = {
-  free: 'AED 0',
-  silver: 'AED 149/mo',
-  gold: 'AED 349/mo',
-  platinum: 'AED 699/mo',
-}
+const DURATIONS = [
+  { id: '1month',  label: '1 Month',  months: 1,  defaultDiscount: 0 },
+  { id: '3month',  label: '3 Months', months: 3,  defaultDiscount: 0 },
+  { id: '6month',  label: '6 Months', months: 6,  defaultDiscount: 0 },
+  { id: '1year',   label: '1 Year',   months: 12, defaultDiscount: 20 },
+]
 
 function Modal({ title, onClose, children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 480, maxHeight: '85vh', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 520, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)' }}>×</button>
@@ -40,19 +40,12 @@ function Field({ label, value, onChange }) {
   )
 }
 
-function daysFromNow(days) {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString()
-}
-
 function formatExpiry(dateStr) {
   if (!dateStr) return null
   const d = new Date(dateStr)
   const now = new Date()
-  const diffMs = d - now
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDays < 0) return { label: 'Expired', color: '#ef4444', days: diffDays }
+  const diffDays = Math.ceil((d - now) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0)  return { label: 'Expired', color: '#ef4444', days: diffDays }
   if (diffDays <= 7) return { label: diffDays + ' days left', color: '#f59e0b', days: diffDays }
   if (diffDays <= 30) return { label: diffDays + ' days left', color: '#3b82f6', days: diffDays }
   return { label: diffDays + ' days left', color: '#10b981', days: diffDays }
@@ -65,12 +58,22 @@ export default function Companies() {
   const [editC, setEditC] = useState(null)
   const [addModal, setAddModal] = useState(false)
   const [planModal, setPlanModal] = useState(null)
-  const [selectedPlan, setSelectedPlan] = useState(null)
-  const [expiryDate, setExpiryDate] = useState('')
+  const [selectedPlan, setSelectedPlan] = useState('free')
+  const [duration, setDuration] = useState('1month')
+  const [discount, setDiscount] = useState(0)
   const [savingPlan, setSavingPlan] = useState(false)
+  const [adminData, setAdminData] = useState(null)
   const [newC, setNewC] = useState({ name: '', category: '', area: '', phone: '', whatsapp: '', email: '', description: '' })
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll(); fetchAdminData() }, [])
+
+  async function fetchAdminData() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data } = await supabase.from('admin_users').select('*').eq('email', user.email).single()
+      setAdminData(data)
+    }
+  }
 
   async function fetchAll() {
     setLoading(true)
@@ -101,37 +104,85 @@ export default function Companies() {
   function openPlanModal(company) {
     setPlanModal(company)
     setSelectedPlan(company.plan || 'free')
-    // Default expiry: 30 days from now
-    const defaultExpiry = new Date()
-    defaultExpiry.setDate(defaultExpiry.getDate() + 30)
-    setExpiryDate(defaultExpiry.toISOString().split('T')[0])
+    setDuration('1month')
+    setDiscount(0)
+  }
+
+  // Pricing calculations
+  const durObj = DURATIONS.find(d => d.id === duration) || DURATIONS[0]
+  const planPrice = PLANS[selectedPlan]?.price || 0
+  const months = durObj.months
+  const baseTotal = planPrice * months
+  const discountAmount = Math.round(baseTotal * (discount / 100))
+  const finalTotal = baseTotal - discountAmount
+
+  function getExpiryDate() {
+    const d = new Date()
+    d.setMonth(d.getMonth() + months)
+    return d.toISOString()
+  }
+
+  function getExpiryLabel() {
+    return new Date(getExpiryDate()).toLocaleDateString('en-AE', { day: 'numeric', month: 'long', year: 'numeric' })
   }
 
   async function savePlan() {
     if (!planModal || !selectedPlan) return
     setSavingPlan(true)
 
-    const updates = {
+    const expiryDate = selectedPlan === 'free' ? null : getExpiryDate()
+
+    await supabase.from('companies').update({
       plan: selectedPlan,
       plan_started_at: new Date().toISOString(),
+      plan_expires_at: expiryDate,
+    }).eq('id', planModal.id)
+
+    // Notify Accounts team + Super Admins
+    if (selectedPlan !== 'free') {
+      const { data: accountsUsers } = await supabase
+        .from('admin_users').select('id').eq('role', 'accounts').eq('is_active', true)
+      const { data: superAdmins } = await supabase
+        .from('admin_users').select('id').in('role', ['super_admin', 'superadmin']).eq('is_active', true)
+
+      const recipients = [...(accountsUsers || []), ...(superAdmins || [])]
+
+      for (const r of recipients) {
+        await supabase.from('notifications').insert({
+          user_id: r.id,
+          type: 'payment_pending',
+          title: '💰 Payment Confirmation Required',
+          message: `${planModal.name} assigned ${PLANS[selectedPlan]?.label} plan for ${durObj.label}. Total: AED ${finalTotal}${discount > 0 ? ' (after ' + discount + '% discount)' : ''}. Please confirm payment received.`,
+          data: {
+            company_id: planModal.id,
+            company_name: planModal.name,
+            plan: selectedPlan,
+            duration: durObj.label,
+            months,
+            base_total: baseTotal,
+            discount_pct: discount,
+            discount_amount: discountAmount,
+            final_total: finalTotal,
+            expires_at: expiryDate,
+            assigned_by: adminData?.full_name || adminData?.email || 'Admin'
+          },
+          is_read: false,
+        })
+      }
     }
 
-    if (selectedPlan === 'free') {
-      updates.plan_expires_at = null
-    } else {
-      updates.plan_expires_at = new Date(expiryDate + 'T23:59:59').toISOString()
-    }
-
-    await supabase.from('companies').update(updates).eq('id', planModal.id)
     setSavingPlan(false)
     setPlanModal(null)
     fetchAll()
+    alert(selectedPlan === 'free'
+      ? '✅ Plan set to Free!'
+      : `✅ Plan saved! Accounts team notified for payment confirmation of AED ${finalTotal}.`
+    )
   }
 
-  const pending  = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
+  const pending = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
   const approved = companies.filter(c => c.status === 'approved')
   const displayList = tab === 'pending' ? pending : tab === 'approved' ? approved : companies
-
   const btn = (color, bg) => ({ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', color, background: bg })
 
   return (
@@ -224,11 +275,13 @@ export default function Companies() {
         </div>
       )}
 
-      {/* Plan Change Modal */}
+      {/* Plan Modal */}
       {planModal && (
         <Modal title={'Change Plan — ' + planModal.name} onClose={() => setPlanModal(null)}>
-          <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text2)' }}>
-            Current plan: <strong style={{ color: PLANS[planModal.plan || 'free']?.color }}>{PLANS[planModal.plan || 'free']?.label}</strong>
+
+          {/* Current plan */}
+          <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
+            Current: <strong style={{ color: PLANS[planModal.plan || 'free']?.color }}>{PLANS[planModal.plan || 'free']?.label}</strong>
             {planModal.plan_expires_at && (
               <span style={{ marginLeft: 8, fontSize: 12, color: formatExpiry(planModal.plan_expires_at)?.color }}>
                 · {formatExpiry(planModal.plan_expires_at)?.label}
@@ -237,68 +290,122 @@ export default function Companies() {
           </div>
 
           {/* Plan selector */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-            {Object.entries(PLANS).map(([key, p]) => (
-              <div key={key} onClick={() => setSelectedPlan(key)} style={{
-                padding: '14px', border: '2px solid ' + (selectedPlan === key ? p.color : 'var(--border)'),
-                borderRadius: 10, cursor: 'pointer', background: selectedPlan === key ? p.bg : '#fff',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: p.color }}>{p.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{PLAN_PRICES[key]}</div>
-              </div>
-            ))}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>1. Select Plan</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {Object.entries(PLANS).map(([key, p]) => (
+                <div key={key} onClick={() => { setSelectedPlan(key); if (key === 'free') setDiscount(0) }} style={{
+                  padding: '12px 14px', border: '2px solid ' + (selectedPlan === key ? p.color : 'var(--border)'),
+                  borderRadius: 10, cursor: 'pointer', background: selectedPlan === key ? p.bg : '#fff', textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: p.color }}>{p.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                    {p.price === 0 ? 'Free' : 'AED ' + p.price + '/mo'}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Expiry date — only for paid plans */}
+          {/* Duration + Discount — only for paid */}
           {selectedPlan && selectedPlan !== 'free' && (
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
-                Plan Expiry Date *
-              </label>
-
-              {/* Quick buttons */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                {[
-                  { label: '1 Month', days: 30 },
-                  { label: '3 Months', days: 90 },
-                  { label: '6 Months', days: 180 },
-                  { label: '1 Year', days: 365 },
-                ].map(({ label, days }) => (
-                  <button key={days} onClick={() => {
-                    const d = new Date()
-                    d.setDate(d.getDate() + days)
-                    setExpiryDate(d.toISOString().split('T')[0])
-                  }} style={{
-                    padding: '5px 12px', border: '1px solid var(--border)',
-                    borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                    background: '#fff', color: 'var(--text2)'
-                  }}>{label}</button>
-                ))}
+            <>
+              {/* Duration */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>2. Select Duration</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {DURATIONS.map(d => (
+                    <div key={d.id} onClick={() => {
+                      setDuration(d.id)
+                      setDiscount(d.defaultDiscount)
+                    }} style={{
+                      padding: '10px 8px', border: '2px solid ' + (duration === d.id ? 'var(--primary)' : 'var(--border)'),
+                      borderRadius: 8, cursor: 'pointer',
+                      background: duration === d.id ? 'var(--primary-light)' : '#fff',
+                      textAlign: 'center', position: 'relative'
+                    }}>
+                      {d.defaultDiscount > 0 && (
+                        <div style={{ position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)', background: 'var(--green)', color: '#fff', fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 99, whiteSpace: 'nowrap' }}>
+                          {d.defaultDiscount}% OFF
+                        </div>
+                      )}
+                      <div style={{ fontSize: 13, fontWeight: 700, color: duration === d.id ? 'var(--primary)' : 'var(--text)' }}>{d.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                        AED {planPrice * d.months}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <input
-                type="date"
-                value={expiryDate}
-                onChange={e => setExpiryDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none' }}
-              />
-
-              {expiryDate && (
-                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)' }}>
-                  Plan will expire on <strong>{new Date(expiryDate).toLocaleDateString('en-AE', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+              {/* Discount */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
+                  3. Discount % <span style={{ fontWeight: 400, color: 'var(--text3)' }}>(editable)</span>
                 </div>
-              )}
-            </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    type="number" min="0" max="100" value={discount}
+                    onChange={e => setDiscount(Math.min(100, Math.max(0, Number(e.target.value))))}
+                    style={{ width: 80, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 16, fontWeight: 700, textAlign: 'center', outline: 'none' }}
+                  />
+                  <span style={{ fontSize: 13, color: 'var(--text2)' }}>%</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[0, 5, 10, 15, 20, 25, 30].map(d => (
+                      <button key={d} onClick={() => setDiscount(d)} style={{
+                        padding: '4px 10px', border: '1px solid ' + (discount === d ? 'var(--primary)' : 'var(--border)'),
+                        borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        background: discount === d ? 'var(--primary-light)' : '#fff',
+                        color: discount === d ? 'var(--primary)' : 'var(--text2)',
+                        fontWeight: discount === d ? 600 : 400
+                      }}>{d}%</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Summary */}
+              <div style={{ background: '#f0fdf4', border: '1px solid #a7f3d0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#065f46', marginBottom: 10 }}>💰 Price Summary</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#374151' }}>
+                    <span>{PLANS[selectedPlan]?.label} Plan × {months} month{months > 1 ? 's' : ''}</span>
+                    <span>AED {baseTotal}</span>
+                  </div>
+                  {discount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#059669', fontWeight: 500 }}>
+                      <span>Discount ({discount}%)</span>
+                      <span>− AED {discountAmount}</span>
+                    </div>
+                  )}
+                  <div style={{ borderTop: '1px solid #a7f3d0', marginTop: 4, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700 }}>
+                    <span style={{ color: '#065f46' }}>Total Payable</span>
+                    <span style={{ color: '#059669' }}>AED {finalTotal}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                    Plan expires: <strong>{getExpiryLabel()}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accounts notification warning */}
+              <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400e', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 16 }}>⚠️</span>
+                <span>
+                  After saving, <strong>Accounts team</strong> will be notified to confirm payment of <strong>AED {finalTotal}</strong>.
+                  Plan is already activated — Accounts will mark it as paid.
+                </span>
+              </div>
+            </>
           )}
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={savePlan} disabled={savingPlan || (selectedPlan !== 'free' && !expiryDate)} style={{
-              flex: 1, padding: 10, background: savingPlan ? 'var(--text3)' : 'var(--primary)',
-              color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer'
+            <button onClick={savePlan} disabled={savingPlan} style={{
+              flex: 1, padding: 10,
+              background: savingPlan ? 'var(--text3)' : 'var(--primary)',
+              color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer'
             }}>
-              {savingPlan ? 'Saving...' : 'Save Plan'}
+              {savingPlan ? 'Saving...' : selectedPlan === 'free' ? '✅ Set to Free' : '📤 Save & Notify Accounts'}
             </button>
             <button onClick={() => setPlanModal(null)} style={{ flex: 1, padding: 10, background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>
               Cancel
