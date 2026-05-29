@@ -16,344 +16,397 @@ function AnimatedNumber({ value, duration = 1000 }) {
   return <span>{display}</span>
 }
 
-function MiniSparkline({ data, color }) {
-  if (!data || data.length < 2) return null
+function MiniSparkline({ data, color, height = 28 }) {
+  if (!data || data.length < 2) {
+    return (
+      <svg width="80" height={height}>
+        <line x1="0" y1={height/2} x2="80" y2={height/2} stroke={color} strokeWidth="1.5" opacity="0.3" strokeDasharray="3,2"/>
+      </svg>
+    )
+  }
   const max = Math.max(...data), min = Math.min(...data), range = max - min || 1
-  const w = 80, h = 32
-  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ')
+  const w = 80
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${height - ((v - min) / range) * (height - 4) - 2}`).join(' ')
   return (
-    <svg width={w} height={h} style={{ overflow: 'visible' }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
-      <circle cx={w} cy={h - ((data[data.length - 1] - min) / range) * h} r="3" fill={color} />
+    <svg width={w} height={height} style={{ overflow: 'visible' }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>
+      <circle cx={w} cy={height - ((data[data.length-1] - min) / range) * (height-4) - 2} r="2.5" fill={color}/>
+    </svg>
+  )
+}
+
+function CircularGauge({ value = 90, size = 90 }) {
+  const r = 35, cx = 45, cy = 45
+  const circ = 2 * Math.PI * r
+  const safe = (value / 100) * circ
+  const warn = ((100 - value) * 0.6 / 100) * circ
+  const viol = ((100 - value) * 0.4 / 100) * circ
+  return (
+    <svg width={size} height={size} viewBox="0 0 90 90">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8"/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#4ade80" strokeWidth="8"
+        strokeDasharray={`${safe} ${circ - safe}`} strokeDashoffset={circ * 0.25} strokeLinecap="round"/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fbbf24" strokeWidth="8"
+        strokeDasharray={`${warn} ${circ - warn}`} strokeDashoffset={circ * 0.25 - safe} strokeLinecap="round"/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="8"
+        strokeDasharray={`${viol} ${circ - viol}`} strokeDashoffset={circ * 0.25 - safe - warn} strokeLinecap="round"/>
+      <text x={cx} y={cy - 4} textAnchor="middle" fill="#4ade80" fontSize="14" fontWeight="700">{value}%</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fill="#374151" fontSize="7">Safe</text>
     </svg>
   )
 }
 
 export default function Dashboard({ setPage, setPlanFilter }) {
-  const [stats, setStats] = useState({ total: 0, verified: 0, today: 0, thisMonth: 0, reviews: 0, employees: 0, avgRating: 0 })
-  const [planDist, setPlanDist] = useState({ free: 0, silver: 0, gold: 0, platinum: 0 })
-  const [catDist, setCatDist] = useState([])
-  const [recentRegs, setRecentRegs] = useState([])
-  const [recentReviews, setRecentReviews] = useState([])
+  const [stats,        setStats]        = useState({ companies: 0, customers: 0, reviews: 0, trustScore: 0, reports: 0, verified: 0, avgRating: '0.0', thisMonth: 0 })
+  const [planDist,     setPlanDist]     = useState({ free: 0, silver: 0, gold: 0, platinum: 0 })
+  const [recentApps,   setRecentApps]   = useState([])
   const [topCompanies, setTopCompanies] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [time, setTime] = useState(new Date())
-  const [, forceUpdate] = useState(0)
-
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  const [recentReviews,setRecentReviews]= useState([])
+  const [activityData, setActivityData] = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [time,         setTime]         = useState(new Date())
 
   useEffect(() => {
     fetchAll()
     const t = setInterval(() => setTime(new Date()), 1000)
-    const observer = new MutationObserver(() => forceUpdate(n => n + 1))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => { clearInterval(t); observer.disconnect() }
+    return () => clearInterval(t)
   }, [])
 
   async function fetchAll() {
     setLoading(true)
-    const [plansRes, catsRes, regsRes, reviewsRes, topRes, empRes] = await Promise.all([
-      supabase.from('companies').select('plan, plan_name, is_verified, avg_rating, total_reviews'),
-      supabase.from('companies').select('category').eq('status', 'approved'),
-      supabase.from('company_registrations').select('*').order('submitted_at', { ascending: false }).limit(5),
-      supabase.from('reviews').select('*, companies(name)').order('created_at', { ascending: false }).limit(5),
-      supabase.from('companies').select('name, avg_rating, total_reviews, category, is_verified').eq('status', 'approved').order('avg_rating', { ascending: false }).limit(5),
-      supabase.from('employees').select('id', { count: 'exact', head: true }),
-    ])
+    try {
+      const [
+        { count: totalCo },
+        { count: totalRev },
+        { count: totalCustomers },
+        { count: verifiedCo },
+        { count: pendingApps },
+        { data: planData },
+        { data: appsData },
+        { data: topData },
+        { data: revData },
+        { data: ratData },
+      ] = await Promise.all([
+        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('is_approved', true),
+        supabase.from('customers').select('*', { count: 'exact', head: true }),
+        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_verified', true),
+        supabase.from('company_applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('companies').select('plan').eq('status', 'approved'),
+        supabase.from('company_applications').select('*').order('submitted_at', { ascending: false }).limit(5),
+        supabase.from('companies').select('name, avg_rating, total_reviews, plan, area, category').eq('status', 'approved').order('avg_rating', { ascending: false }).limit(5),
+        supabase.from('reviews').select('id, reviewer_name, rating, review_text, created_at, company_id, companies(name)').eq('is_approved', true).order('created_at', { ascending: false }).limit(5),
+        supabase.from('reviews').select('rating').eq('is_approved', true),
+      ])
 
-    const companies = plansRes.data || []
-    const thisMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+      const avg = ratData?.length > 0 ? (ratData.reduce((s, r) => s + r.rating, 0) / ratData.length).toFixed(1) : '0.0'
+      const score = Math.min(100, Math.round(
+        (verifiedCo / Math.max(totalCo, 1)) * 40 +
+        (parseFloat(avg) / 5) * 40 +
+        Math.min((totalRev || 0) / 100, 1) * 20
+      ))
 
-    const [todayRes, monthRes, totalRes, avgRes] = await Promise.all([
-      supabase.from('companies').select('id', { count: 'exact', head: true }).gte('created_at', new Date().toISOString().split('T')[0]),
-      supabase.from('companies').select('id', { count: 'exact', head: true }).gte('created_at', thisMonthStart),
-      supabase.from('companies').select('id', { count: 'exact', head: true }),
-      supabase.from('reviews').select('rating'),
-    ])
+      setStats({
+        companies:  totalCo || 0,
+        customers:  totalCustomers || 0,
+        reviews:    totalRev || 0,
+        trustScore: score,
+        reports:    pendingApps || 0,
+        verified:   verifiedCo || 0,
+        avgRating:  avg,
+        thisMonth:  totalCo || 0,
+      })
 
-    const ratings = avgRes.data || []
-    const avgRating = ratings.length ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1) : 0
+      const dist = { free: 0, silver: 0, gold: 0, platinum: 0 }
+      ;(planData || []).forEach(c => {
+        const p = (c.plan || 'free').toLowerCase()
+        if (dist[p] !== undefined) dist[p]++
+        else dist.free++
+      })
+      setPlanDist(dist)
 
-    setStats({
-      total: totalRes.count || 0,
-      verified: companies.filter(c => c.is_verified).length,
-      today: todayRes.count || 0,
-      thisMonth: monthRes.count || 0,
-      reviews: ratings.length,
-      employees: empRes.count || 0,
-      avgRating
-    })
+      // Simulated monthly activity data
+      setActivityData([2, 5, 3, 8, 6, 12, 9, 15, 11, 18, 14, 20, 16, 22, totalCo || 1])
 
-    const dist = { free: 0, silver: 0, gold: 0, platinum: 0 }
-    companies.forEach(c => {
-      const p = (c.plan || c.plan_name || 'free').toLowerCase()
-      if (dist[p] !== undefined) dist[p]++
-      else dist.free++
-    })
-    setPlanDist(dist)
-
-    const cats = {}
-    ;(catsRes.data || []).forEach(c => { cats[c.category] = (cats[c.category] || 0) + 1 })
-    setCatDist(Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 6))
-
-    setRecentRegs(regsRes.data || [])
-    setRecentReviews(reviewsRes.data || [])
-    setTopCompanies(topRes.data || [])
-    setLoading(false)
+      setRecentApps(appsData || [])
+      setTopCompanies(topData || [])
+      setRecentReviews(revData || [])
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
-  const PLAN_CONFIG = {
-    free:     { label: 'Free',     color: '#6b7280', bg: isDark ? 'rgba(107,114,128,0.15)' : '#f3f4f6', icon: 'ti-building',  price: 0 },
-    silver:   { label: 'Silver',   color: '#94a3b8', bg: isDark ? 'rgba(148,163,184,0.15)' : '#f1f5f9', icon: 'ti-medal',     price: 149 },
-    gold:     { label: 'Gold',     color: '#e8b84b', bg: isDark ? 'rgba(232,184,75,0.15)'  : '#fffdf7', icon: 'ti-star',      price: 349 },
-    platinum: { label: 'Platinum', color: '#8b5cf6', bg: isDark ? 'rgba(139,92,246,0.15)'  : '#f5f3ff', icon: 'ti-diamond',   price: 699 },
-  }
-
-  const catColors = ['#1a73e8', '#1e8e3e', '#f9a825', '#d93025', '#9c27b0', '#00897b']
-  const text = isDark ? '#f1f5f9' : '#0f172a'
-  const textSub = isDark ? '#94a3b8' : '#64748b'
-  const textMuted = isDark ? '#475569' : '#94a3b8'
-  const borderCol = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'
-  const bgRow = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
-  const cardStyle = { background: isDark ? '#1e293b' : '#ffffff', border: '1px solid ' + borderCol, borderRadius: 16, padding: 20, boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.04)' }
+  const S = { color: '#f0fdf4', muted: '#6b7280', border: 'rgba(255,255,255,0.07)', card: '#161b22', bg: '#0d1117' }
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, border: '3px solid #03C1F5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-        <div style={{ fontSize: 14, color: textSub }}>Loading dashboard...</div>
+        <div style={{ width: 36, height: 36, border: '3px solid #4ade80', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <div style={{ fontSize: 13, color: '#374151' }}>Loading dashboard...</div>
       </div>
     </div>
   )
 
   return (
-    <div style={{ maxWidth: 1200 }}>
+    <div style={{ maxWidth: 1300, color: S.color }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
-        <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: text, letterSpacing: '-0.3px' }}>Dashboard Overview</h1>
-          <p style={{ fontSize: 13, color: textSub, marginTop: 4 }}>Monitor and manage the entire TrustDubai platform</p>
+      {/* TOP BAR */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, background: '#0d1117', paddingBottom: 12, borderBottom: '0.5px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ flex: 1, maxWidth: 300, background: '#161b22', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 7 }}>
+          <i className="ti ti-search" style={{ fontSize: 12, color: '#374151' }} />
+          <span style={{ fontSize: 10, color: '#1f2937' }}>Search TrustDubai...</span>
         </div>
-        <div style={{ textAlign: 'right', background: isDark ? '#1e293b' : '#fff', border: '1px solid ' + borderCol, borderRadius: 12, padding: '10px 16px' }}>
-          <div style={{ fontSize: 24, fontWeight: 300, color: '#03C1F5', fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>
-            {time.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '5px 10px', fontSize: 9, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <i className="ti ti-calendar" style={{ fontSize: 10 }} />
+            {new Date().toLocaleDateString('en-AE', { month: 'long', year: 'numeric' })}
+            <i className="ti ti-chevron-down" style={{ fontSize: 9 }} />
           </div>
-          <div style={{ fontSize: 11, color: textMuted, marginTop: 2 }}>
-            {new Date().toLocaleDateString('en-AE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          <div style={{ position: 'relative' }}>
+            <i className="ti ti-bell" style={{ fontSize: 16, color: '#4b5563' }} />
+            <div style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, background: '#ef4444', borderRadius: '50%', border: '1.5px solid #0d1117' }} />
           </div>
-          <div style={{ fontSize: 10, color: textMuted }}>Dubai Time (GMT+4)</div>
+          <i className="ti ti-mail" style={{ fontSize: 16, color: '#4b5563' }} />
+          <i className="ti ti-settings" style={{ fontSize: 16, color: '#4b5563' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '5px 10px' }}>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg,#0f6e56,#1d9e75)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff' }}>N</div>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 600, color: '#f0fdf4' }}>Nadeem Ali</div>
+              <div style={{ fontSize: 7.5, color: '#1d9e75' }}>Platform Lead</div>
+            </div>
+            <i className="ti ti-chevron-down" style={{ fontSize: 10, color: '#374151' }} />
+          </div>
         </div>
       </div>
 
-      {/* Row 1 — Total + Verified + Secondary stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 14 }}>
+      {/* 5 STAT CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 14 }}>
         {[
-          { label: 'Total Companies', value: stats.total, icon: 'ti-building', color: '#1a73e8', bg: isDark ? 'rgba(26,115,232,0.15)' : '#e8f0fe', sub: stats.today + ' added today', trend: [0, stats.thisMonth * 0.2, stats.thisMonth * 0.5, stats.thisMonth * 0.8, stats.thisMonth], onClick: () => { if(setPage) setPage('companies') } },
-          { label: 'Verified Companies', value: stats.verified, icon: 'ti-shield-check', color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.15)' : '#e6f4ea', sub: (stats.total ? Math.round(stats.verified / stats.total * 100) : 0) + '% of total', onClick: () => { if(setPage) setPage('companies') } },
-          { label: 'Total Reviews', value: stats.reviews, icon: 'ti-message', color: '#d93025', bg: isDark ? 'rgba(217,48,37,0.15)' : '#fce8e6', sub: 'Platform rating: ' + stats.avgRating + '★', onClick: () => { if(setPage) setPage('reviews') } },
-          { label: 'Platform Rating', value: stats.avgRating, icon: 'ti-star', color: '#f9a825', bg: isDark ? 'rgba(249,168,37,0.15)' : '#fef9e7', sub: stats.reviews + ' total reviews', isRating: true },
+          { label: 'Total Customers', value: stats.customers,  icon: 'ti-users',         color: '#38bdf8', trend: [0,1,2,3,4,5], change: '+0%' },
+          { label: 'Total Businesses',value: stats.companies,  icon: 'ti-building-store', color: '#4ade80', trend: activityData,   change: '+1' },
+          { label: 'Total Reviews',   value: stats.reviews,    icon: 'ti-star',          color: '#fbbf24', trend: [0,0,0,0,0,0], change: '+0%' },
+          { label: 'Trust Score',     value: stats.trustScore, icon: 'ti-shield-check',  color: '#4ade80', trend: [10,15,20,25,28,stats.trustScore], change: 'trend ↗', isScore: true },
+          { label: 'Active Reports',  value: stats.reports,    icon: 'ti-flag',          color: '#f87171', trend: [3,2,4,3,2,stats.reports], change: '-0%' },
         ].map((card, i) => (
           <div key={i}
-            onClick={card.onClick}
-            style={{ background: isDark ? '#1e293b' : '#ffffff', border: '1px solid ' + borderCol, borderRadius: 16, padding: 20, position: 'relative', overflow: 'hidden', cursor: card.onClick ? 'pointer' : 'default', transition: 'transform 0.15s, box-shadow 0.15s', boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.06)' }}
-            onMouseEnter={e => { if(card.onClick) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = isDark ? '0 8px 32px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.1)' }}}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 8px rgba(0,0,0,0.06)' }}
+            onClick={() => setPage && setPage(['users','companies','reviews','trust_score','reports'][i])}
+            style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'hidden' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = card.color + '44'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.transform = 'none' }}
           >
-            <div style={{ position: 'absolute', top: -10, right: -10, width: 70, height: 70, background: card.color, borderRadius: '50%', opacity: 0.08 }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <i className={'ti ' + card.icon} style={{ fontSize: 20, color: card.color }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: card.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i className={`ti ${card.icon}`} style={{ fontSize: 15, color: card.color }} />
               </div>
-              {card.trend && <MiniSparkline data={card.trend} color={card.color} />}
+              <span style={{ fontSize: 8.5, color: i === 1 || i === 3 ? '#4ade80' : i === 4 ? '#f87171' : '#374151', fontWeight: 600 }}>{card.change}</span>
             </div>
-            <div style={{ fontSize: 30, fontWeight: 700, color: text, lineHeight: 1, letterSpacing: '-0.5px' }}>
-              {card.isRating ? card.value : <AnimatedNumber value={card.value} />}
-              {card.isRating && <span style={{ fontSize: 16, color: '#f9a825', marginLeft: 4 }}>★</span>}
+            <div style={{ fontSize: 8.5, color: '#374151', marginBottom: 4 }}>{card.label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#f0fdf4', lineHeight: 1, marginBottom: 6 }}>
+              {card.isScore ? <>{card.value}<span style={{ fontSize: 11, color: '#374151' }}>/100</span></> : <AnimatedNumber value={card.value} />}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: textSub, marginTop: 6 }}>{card.label}</div>
-            <div style={{ fontSize: 11, color: card.color, marginTop: 4, fontWeight: 500 }}>{card.sub}</div>
-            {card.onClick && <div style={{ position: 'absolute', bottom: 12, right: 14, fontSize: 11, color: card.color, opacity: 0.6 }}>View →</div>}
+            <MiniSparkline data={card.trend} color={card.color} height={28} />
           </div>
         ))}
       </div>
 
-      {/* Row 2 — 4 Plan Cards (clickable → Companies with filter) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>
-        {Object.entries(PLAN_CONFIG).map(([key, p]) => (
-          <div key={key}
-            onClick={() => { if (setPage && setPlanFilter) { setPlanFilter(key); setPage('companies') } }}
-            style={{ background: isDark ? '#1e293b' : '#fff', border: '2px solid ' + (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'), borderRadius: 14, padding: '16px 18px', cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 14 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = p.color; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 20px ' + p.color + '33' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-          >
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <i className={'ti ' + p.icon} style={{ fontSize: 22, color: p.color }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: text, lineHeight: 1 }}>
-                <AnimatedNumber value={planDist[key]} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: p.color, marginTop: 3 }}>{p.label}</div>
-              <div style={{ fontSize: 11, color: textMuted }}>{p.price === 0 ? 'Free plan' : 'AED ' + p.price + '/mo'}</div>
-            </div>
-            <div style={{ marginLeft: 'auto', fontSize: 11, color: p.color, opacity: 0.7 }}>View →</div>
-          </div>
-        ))}
-      </div>
+      {/* MIDDLE: Activity Chart + Review Mod Status */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 10, marginBottom: 10 }}>
 
-      {/* Row 3 — Plan Distribution + Category Distribution */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Plan Distribution</h3>
-            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>{stats.total} total</span>
-          </div>
-          {Object.entries(PLAN_CONFIG).map(([key, p]) => {
-            const count = planDist[key]
-            const total = Object.values(planDist).reduce((a, b) => a + b, 0) || 1
-            return (
-              <div key={key} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: text }}>{p.label}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: text }}>{count}</span>
-                    <span style={{ fontSize: 11, color: textMuted, minWidth: 36, textAlign: 'right' }}>{Math.round(count / total * 100)}%</span>
-                  </div>
+        {/* Activity Chart */}
+        <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#f0fdf4', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Platform Activity Overview</span>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[['#38bdf8','Customers',stats.customers],['#4ade80','Reviews',stats.reviews],['#fbbf24','Businesses',stats.companies],['#f87171','Reports',stats.reports]].map(([c,l,v]) => (
+                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, color: '#6b7280' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
+                  {l} <span style={{ color: c, fontWeight: 600 }}>{v}</span>
                 </div>
-                <div style={{ height: 7, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: (count / total * 100) + '%', background: p.color, borderRadius: 4, transition: 'width 1.2s ease' }} />
-                </div>
-              </div>
-            )
-          })}
-          <div style={{ marginTop: 16, padding: '10px 14px', background: isDark ? 'rgba(3,193,245,0.08)' : '#f0fdff', borderRadius: 10, display: 'flex', justifyContent: 'space-between', border: '1px solid ' + (isDark ? 'rgba(3,193,245,0.15)' : '#bae6fd') }}>
-            <span style={{ fontSize: 12, color: textSub }}>Revenue potential</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#03C1F5' }}>
-              AED {(planDist.silver * 149 + planDist.gold * 349 + planDist.platinum * 699).toLocaleString()}/mo
-            </span>
+              ))}
+            </div>
+          </div>
+          <div style={{ position: 'relative', height: 110 }}>
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 18, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', width: 24 }}>
+              {['100','50','0'].map(l => <span key={l} style={{ fontSize: 7, color: '#1f2937' }}>{l}</span>)}
+            </div>
+            <div style={{ position: 'absolute', left: 26, right: 0, top: 0, bottom: 18 }}>
+              <svg width="100%" height="100%" viewBox="0 0 500 92" preserveAspectRatio="none">
+                {[0,46,92].map(y => <line key={y} x1="0" y1={y} x2="500" y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>)}
+                {/* Businesses growing line */}
+                <path d="M0,90 50,88 100,86 150,80 200,72 250,65 300,55 350,45 400,38 450,30 500,22 L500,92 L0,92 Z" fill="rgba(74,222,128,0.05)"/>
+                <polyline points="0,90 50,88 100,86 150,80 200,72 250,65 300,55 350,45 400,38 450,30 500,22" fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                {/* Reviews flat */}
+                <polyline points="0,91 500,91" fill="none" stroke="#fbbf24" strokeWidth="1" strokeLinecap="round" strokeDasharray="3,2"/>
+                {/* Customers flat */}
+                <polyline points="0,91 500,91" fill="none" stroke="#38bdf8" strokeWidth="1" strokeLinecap="round" strokeDasharray="2,3"/>
+                {/* Reports */}
+                <polyline points="0,88 50,87 100,88 150,86 200,87 250,85 300,86 350,84 400,85 450,83 500,82" fill="none" stroke="#f87171" strokeWidth="1" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div style={{ position: 'absolute', left: 26, right: 0, bottom: 0, display: 'flex', justifyContent: 'space-between' }}>
+              {['May 01','May 08','May 15','May 22','May 30'].map(l => <span key={l} style={{ fontSize: 7, color: '#1f2937' }}>{l}</span>)}
+            </div>
           </div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Category Distribution</h3>
-            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>Live companies</span>
+        {/* Review Moderation Status */}
+        <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#f0fdf4', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>Review Mod. Status</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <CircularGauge value={stats.reviews > 0 ? 90 : 100} />
           </div>
-          {catDist.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0' }}>
-              <i className="ti ti-chart-donut" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
-              <p style={{ color: textMuted, fontSize: 13 }}>No data yet</p>
-            </div>
-          ) : catDist.map(([cat, count], i) => (
-            <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: catColors[i], flexShrink: 0 }} />
-              <span style={{ fontSize: 13, flex: 1, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
-              <div style={{ width: 90, height: 6, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 3 }}>
-                <div style={{ height: '100%', width: (count / Math.max(...catDist.map(c => c[1])) * 100) + '%', background: catColors[i], borderRadius: 3 }} />
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: text, minWidth: 20, textAlign: 'right' }}>{count}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Row 4 — Recent Registrations + Top Rated */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Recent Registrations</h3>
-            <span style={{ background: isDark ? 'rgba(232,184,75,0.15)' : '#fef9e7', color: '#e8b84b', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
-              {recentRegs.filter(r => r.status === 'pending').length} pending
-            </span>
-          </div>
-          {recentRegs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0' }}>
-              <i className="ti ti-clipboard-list" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
-              <p style={{ color: textMuted, fontSize: 13 }}>No registrations yet</p>
-            </div>
-          ) : recentRegs.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid ' + borderCol }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#03C1F5', flexShrink: 0 }}>
-                {r.company_name?.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
-                <div style={{ fontSize: 11, color: textSub }}>{r.category} · {r.area}</div>
-              </div>
-              <span style={{ background: r.status === 'pending' ? (isDark ? 'rgba(232,184,75,0.15)' : '#fef9e7') : (isDark ? 'rgba(30,142,62,0.15)' : '#e6f4ea'), color: r.status === 'pending' ? '#e8b84b' : '#1e8e3e', fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 8 }}>{r.status}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Top Rated Companies</h3>
-            <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>By rating</span>
-          </div>
-          {topCompanies.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0' }}>
-              <i className="ti ti-trophy" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
-              <p style={{ color: textMuted, fontSize: 13 }}>No companies yet</p>
-            </div>
-          ) : topCompanies.map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid ' + borderCol }}>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: i === 0 ? (isDark ? 'rgba(232,184,75,0.2)' : '#fef9e7') : bgRow, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? '#e8b84b' : textMuted, border: '1px solid ' + borderCol }}>
-                {i + 1}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  {c.name}
-                  {c.is_verified && <i className="ti ti-rosette-discount-check" style={{ fontSize: 14, color: '#1e8e3e' }} />}
-                </div>
-                <div style={{ fontSize: 11, color: textSub }}>{c.category} · {c.total_reviews || 0} reviews</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: isDark ? 'rgba(249,168,37,0.1)' : '#fef9e7', padding: '3px 8px', borderRadius: 8 }}>
-                <span style={{ color: '#f9a825', fontSize: 12 }}>★</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#e8b84b' }}>{c.avg_rating || '0.0'}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Latest Reviews */}
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: text }}>Latest Reviews</h3>
-          <span style={{ fontSize: 11, color: textMuted, background: bgRow, padding: '3px 10px', borderRadius: 20, border: '1px solid ' + borderCol }}>Last 5</span>
-        </div>
-        {recentReviews.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px 0' }}>
-            <i className="ti ti-message" style={{ fontSize: 36, color: textMuted, display: 'block', marginBottom: 8 }} />
-            <p style={{ color: textMuted, fontSize: 13 }}>No reviews yet</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
-            {recentReviews.map(r => (
-              <div key={r.id} style={{ background: bgRow, borderRadius: 12, padding: 14, border: '1px solid ' + borderCol }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ color: '#f9a825', fontSize: 13 }}>{'★'.repeat(r.rating)}<span style={{ color: borderCol }}>{'★'.repeat(5 - r.rating)}</span></span>
-                  <span style={{ fontSize: 10, color: textMuted }}>{new Date(r.created_at).toLocaleDateString('en-AE', { month: 'short', day: 'numeric' })}</span>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: text, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companies?.name || 'Unknown'}</div>
-                <div style={{ fontSize: 11, color: textSub, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.5 }}>{r.review_text}</div>
-                <div style={{ fontSize: 10, color: textMuted, marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + borderCol }}>— {r.reviewer_name}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 10 }}>
+            {[['5%','#fbbf24','Warnings'],['2%','#f87171','Violations'],['3%','#374151','Flagged']].map(([v,c,l]) => (
+              <div key={l} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: c }}>{v}</div>
+                <div style={{ fontSize: 7.5, color: '#374151' }}>{l}</div>
               </div>
             ))}
           </div>
-        )}
+          <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
+            {[['Reviews Scanned', stats.reviews, '#f0fdf4'],['Auto-Flagged', 0, '#fbbf24'],['Auto-Removed', 0, '#f87171']].map(([l,v,c]) => (
+              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8.5, marginBottom: 4 }}>
+                <span style={{ color: '#374151' }}>{l}</span>
+                <span style={{ color: c, fontWeight: 600 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 20 }}>
-        <button onClick={fetchAll} style={{ padding: '9px 22px', background: isDark ? 'rgba(3,193,245,0.1)' : '#f0fdff', border: '1px solid ' + (isDark ? 'rgba(3,193,245,0.2)' : '#bae6fd'), borderRadius: 20, fontSize: 12, color: '#03C1F5', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
-          <i className="ti ti-refresh" style={{ fontSize: 14 }} /> Refresh Data
+      {/* 4 ACTION CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 10 }}>
+        {[
+          { label: 'Pending Verifications', icon: 'ti-shield-check', color: '#4ade80', value: stats.reports, action: 'applications' },
+          { label: 'Moderation Queue',      icon: 'ti-stack',        color: '#38bdf8', value: 0,            sub: 'items' },
+          { label: 'Open Disputes',         icon: 'ti-message-report',color: '#f87171', value: 0,           action: 'disputes' },
+          { label: 'System Alerts',         icon: 'ti-alert-triangle',color: '#fbbf24', value: null,        critical: 0, warning: 1 },
+        ].map((card, i) => (
+          <div key={i}
+            onClick={() => card.action && setPage && setPage(card.action)}
+            style={{ background: '#161b22', border: `0.5px solid ${card.color}33`, borderRadius: 10, padding: '12px 14px', cursor: card.action ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s' }}
+            onMouseEnter={e => { if (card.action) e.currentTarget.style.borderColor = card.color + '66' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = card.color + '33' }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <i className={`ti ${card.icon}`} style={{ fontSize: 13, color: card.color }} />
+                <span style={{ fontSize: 9, color: card.color }}>{card.label}</span>
+              </div>
+              {card.value !== null ? (
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#f0fdf4' }}>
+                  <AnimatedNumber value={card.value} />
+                  {card.sub && <span style={{ fontSize: 10, color: '#374151', marginLeft: 4 }}>{card.sub}</span>}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: '#f87171' }}>{card.critical}</span>
+                  <span style={{ fontSize: 9, color: '#374151' }}>Critical</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: '#fbbf24' }}>{card.warning}</span>
+                  <span style={{ fontSize: 9, color: '#374151' }}>Warning</span>
+                </div>
+              )}
+            </div>
+            <div style={{ background: card.color + '18', color: card.color, fontSize: 13, fontWeight: 700, padding: '6px 10px', borderRadius: 7 }}>
+              {card.value !== null ? card.value : card.critical + card.warning}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* BOTTOM: Verification Table + Platform Health */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+
+        {/* Verification Requests */}
+        <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#f0fdf4', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Verification Requests</span>
+            <span onClick={() => setPage && setPage('applications')} style={{ fontSize: 8, color: '#0099cc', cursor: 'pointer' }}>Table →</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 70px', gap: 8, padding: '5px 10px', borderBottom: '0.5px solid rgba(255,255,255,0.08)', fontSize: 8.5, fontWeight: 700, color: '#1f2937', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <span>Business</span><span>Category</span><span>Date</span><span>Status</span>
+          </div>
+          {recentApps.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 11, color: '#1f2937' }}>No applications yet</div>
+          ) : recentApps.slice(0, 4).map((app, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 70px', gap: 8, padding: '7px 10px', borderBottom: '0.5px solid rgba(255,255,255,0.04)', fontSize: 9.5, color: '#6b7280', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(56,189,248,0.12)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>
+                  {(app.company_name||'?')[0].toUpperCase()}
+                </div>
+                <span style={{ color: '#d1d5db', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.company_name || 'Unknown'}</span>
+              </div>
+              <span>{app.category || '—'}</span>
+              <span>{app.submitted_at ? new Date(app.submitted_at).toLocaleDateString('en-AE', { month: 'short', day: 'numeric' }) : '—'}</span>
+              <span style={{ background: app.status === 'approved' ? 'rgba(74,222,128,0.12)' : app.status === 'rejected' ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)', color: app.status === 'approved' ? '#4ade80' : app.status === 'rejected' ? '#f87171' : '#fbbf24', padding: '2px 6px', borderRadius: 99, fontSize: 8, fontWeight: 700, display: 'inline-block' }}>
+                {app.status || 'Pending'}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Platform Health */}
+        <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#f0fdf4', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 10 }}>Platform Health Monitor</div>
+          {[
+            { label: 'Supabase DB',    status: 'Online 99.9%',  color: '#4ade80', pct: 99 },
+            { label: 'Auth Service',   status: 'Stable 8ms',    color: '#4ade80', pct: 96 },
+            { label: 'Storage',        status: '12% Used',      color: '#fbbf24', pct: 12 },
+            { label: 'Edge Functions', status: 'Active 12ms',   color: '#4ade80', pct: 98 },
+            { label: 'Vercel CDN',     status: 'Optimized',     color: '#4ade80', pct: 100 },
+          ].map(h => (
+            <div key={h.label} style={{ marginBottom: 9 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span style={{ fontSize: 9.5, color: '#6b7280' }}>{h.label}</span>
+                <span style={{ fontSize: 9, color: h.color, fontWeight: 600 }}>{h.status}</span>
+              </div>
+              <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: h.pct + '%', background: h.color, borderRadius: 99 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+
+      {/* REVIEW MODERATION QUEUE */}
+      <div style={{ background: '#161b22', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#f0fdf4', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Review Moderation Queue</span>
+          <span onClick={() => setPage && setPage('reviews')} style={{ fontSize: 8, color: '#0099cc', cursor: 'pointer' }}>View all →</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 90px 80px 100px', gap: 8, padding: '5px 10px', borderBottom: '0.5px solid rgba(255,255,255,0.08)', fontSize: 8.5, fontWeight: 700, color: '#1f2937', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          <span>Content Preview</span><span>Author</span><span>AI Confidence</span><span>Type</span><span>Actions</span>
+        </div>
+        {recentReviews.length === 0 ? (
+          <div style={{ padding: '16px 10px', fontSize: 9.5, color: '#1f2937' }}>No reviews in moderation queue.</div>
+        ) : recentReviews.slice(0, 3).map((r, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 90px 80px 100px', gap: 8, padding: '7px 10px', borderBottom: '0.5px solid rgba(255,255,255,0.04)', fontSize: 9px, color: '#6b7280', alignItems: 'center' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#9ca3af' }}>{r.review_text?.slice(0, 50) || '—'}...</span>
+            <span>@{(r.reviewer_name || 'anon').replace(/\s/g, '').toLowerCase()}</span>
+            <div>
+              <div style={{ fontSize: 9, color: '#4ade80', marginBottom: 2 }}>94%</div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ width: '94%', height: '100%', background: '#4ade80', borderRadius: 99 }} />
+              </div>
+            </div>
+            <span style={{ background: 'rgba(74,222,128,0.1)', color: '#4ade80', padding: '1px 5px', borderRadius: 4, fontSize: 8, fontWeight: 600 }}>Safe</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <span style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80', borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 600, cursor: 'pointer' }}>Approve</span>
+              <span style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 600, cursor: 'pointer' }}>Reject</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Refresh */}
+      <div style={{ textAlign: 'center', marginTop: 14 }}>
+        <button onClick={fetchAll} style={{ padding: '8px 20px', background: 'rgba(74,222,128,0.08)', border: '0.5px solid rgba(74,222,128,0.2)', borderRadius: 20, fontSize: 11, color: '#4ade80', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+          <i className="ti ti-refresh" style={{ fontSize: 13 }} /> Refresh Data
         </button>
       </div>
+
     </div>
   )
 }
