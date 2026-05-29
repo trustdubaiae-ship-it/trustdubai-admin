@@ -14,8 +14,6 @@ import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
 import Leads from './pages/Leads'
 import Sidebar from './components/Sidebar'
-
-// New empty pages
 import Users from './pages/Users'
 import Reports from './pages/Reports'
 import Disputes from './pages/Disputes'
@@ -31,6 +29,7 @@ export default function App() {
   const [adminData, setAdminData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState('dashboard')
+  const [planFilter, setPlanFilter] = useState('all')
   const [theme, setTheme] = useState(() => localStorage.getItem('admin_theme') || 'dark')
 
   useEffect(() => {
@@ -98,8 +97,8 @@ export default function App() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} theme={theme} setTheme={setTheme} />
       <div style={{ flex: 1, marginLeft: 240, padding: 24, background: 'var(--bg)', minHeight: '100vh' }}>
-        {page === 'dashboard'         && <Dashboard />}
-        {page === 'companies'         && <Companies canAccess={canAccess} />}
+        {page === 'dashboard'         && <Dashboard setPage={setPage} setPlanFilter={setPlanFilter} />}
+        {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
         {page === 'leads'             && <Leads />}
         {page === 'categories'        && canAccess('manage_categories') && <Categories />}
