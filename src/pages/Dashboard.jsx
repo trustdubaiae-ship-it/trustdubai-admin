@@ -40,58 +40,60 @@ function CircularGauge({ value = 90, isDark }) {
   const viol = ((100-value)*0.4/100)*circ
   return (
     <svg width="100" height="100" viewBox="0 0 90 90">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'} strokeWidth="8"/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={isDark?'rgba(255,255,255,0.06)':'#f1f5f9'} strokeWidth="8"/>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#4ade80" strokeWidth="8" strokeDasharray={`${safe} ${circ-safe}`} strokeDashoffset={circ*0.25} strokeLinecap="round"/>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fbbf24" strokeWidth="8" strokeDasharray={`${warn} ${circ-warn}`} strokeDashoffset={circ*0.25-safe} strokeLinecap="round"/>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f87171" strokeWidth="8" strokeDasharray={`${viol} ${circ-viol}`} strokeDashoffset={circ*0.25-safe-warn} strokeLinecap="round"/>
       <text x={cx} y={cy-4} textAnchor="middle" fill="#4ade80" fontSize="15" fontWeight="700">{value}%</text>
-      <text x={cx} y={cy+10} textAnchor="middle" fill={isDark?"#374151":"#94a3b8"} fontSize="7">Safe Content</text>
+      <text x={cx} y={cy+10} textAnchor="middle" fill={isDark?'#374151':'#94a3b8'} fontSize="7">Safe Content</text>
     </svg>
   )
 }
 
-// ── Clock — stable, only seconds digit changes ──────────
+// ── STABLE CLOCK — useRef DOM update, no React re-render ──
 function Clock({ isDark }) {
-  const [hh, setHh] = useState('')
-  const [mm, setMm] = useState('')
-  const [ss, setSs] = useState('')
-  const [date, setDate] = useState('')
+  const hhRef   = useRef(null)
+  const mmRef   = useRef(null)
+  const ssRef   = useRef(null)
+  const dateRef = useRef(null)
 
   useEffect(() => {
     function tick() {
-      const now = new Date()
-      setHh(String(now.getHours()).padStart(2,'0'))
-      setMm(String(now.getMinutes()).padStart(2,'0'))
-      setSs(String(now.getSeconds()).padStart(2,'0'))
-      setDate(now.toLocaleDateString('en-AE',{ weekday:'long', day:'numeric', month:'long', year:'numeric' }))
+      const now  = new Date()
+      const hh   = String(now.getHours()).padStart(2,'0')
+      const mm   = String(now.getMinutes()).padStart(2,'0')
+      const ss   = String(now.getSeconds()).padStart(2,'0')
+      const date = now.toLocaleDateString('en-AE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+      if (hhRef.current)   hhRef.current.textContent   = hh
+      if (mmRef.current)   mmRef.current.textContent   = mm
+      if (ssRef.current)   ssRef.current.textContent   = ss
+      if (dateRef.current) dateRef.current.textContent = date
     }
     tick()
     const t = setInterval(tick, 1000)
     return () => clearInterval(t)
   }, [])
 
-  const bg     = isDark ? '#161b22' : '#ffffff'
-  const border = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'
-  const digitBg= isDark ? '#0d1117' : '#f0f4f8'
-  const digitBorder = isDark ? 'rgba(74,222,128,0.25)' : '#d1fae5'
+  const bg          = isDark ? '#161b22'               : '#ffffff'
+  const border      = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'
+  const digitBg     = isDark ? '#0d1117'               : '#f8fafc'
+  const digitBorder = isDark ? 'rgba(74,222,128,0.25)' : '#bbf7d0'
+  const labelColor  = isDark ? '#374151'               : '#94a3b8'
 
   return (
-    <div style={{ background:bg, border:`0.5px solid ${border}`, borderRadius:14, padding:'12px 18px', textAlign:'center', minWidth:210 }}>
+    <div style={{ background:bg, border:`0.5px solid ${border}`, borderRadius:14, padding:'12px 18px', textAlign:'center', minWidth:215 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:5, marginBottom:8 }}>
         <i className="ti ti-clock" style={{ fontSize:11, color:'#4ade80' }}/>
-        <span style={{ fontSize:9, color:isDark?'#374151':'#94a3b8', fontWeight:600, letterSpacing:'0.07em', textTransform:'uppercase' }}>Dubai Time (GMT+4)</span>
+        <span style={{ fontSize:9, color:labelColor, fontWeight:600, letterSpacing:'0.07em', textTransform:'uppercase' }}>Dubai Time (GMT+4)</span>
       </div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-        {/* HH — stable */}
-        <div style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 10px', fontSize:26, fontWeight:700, color:'#4ade80', letterSpacing:2, fontVariantNumeric:'tabular-nums', minWidth:54, textAlign:'center' }}>{hh}</div>
-        <span style={{ fontSize:22, fontWeight:700, color:'#4ade80', opacity:0.5, marginBottom:2 }}>:</span>
-        {/* MM — stable */}
-        <div style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 10px', fontSize:26, fontWeight:700, color:'#4ade80', letterSpacing:2, fontVariantNumeric:'tabular-nums', minWidth:54, textAlign:'center' }}>{mm}</div>
-        <span style={{ fontSize:22, fontWeight:700, color:'#4ade80', opacity:0.5, marginBottom:2 }}>:</span>
-        {/* SS — updates every second */}
-        <div style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 10px', fontSize:26, fontWeight:700, color:'#4ade80', letterSpacing:2, fontVariantNumeric:'tabular-nums', minWidth:54, textAlign:'center', opacity:0.7 }}>{ss}</div>
+        <div ref={hhRef} style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 0', fontSize:26, fontWeight:700, color:'#4ade80', fontVariantNumeric:'tabular-nums', width:52, textAlign:'center' }}/>
+        <span style={{ fontSize:22, fontWeight:700, color:'#4ade80', opacity:0.5 }}>:</span>
+        <div ref={mmRef} style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 0', fontSize:26, fontWeight:700, color:'#4ade80', fontVariantNumeric:'tabular-nums', width:52, textAlign:'center' }}/>
+        <span style={{ fontSize:22, fontWeight:700, color:'#4ade80', opacity:0.5 }}>:</span>
+        <div ref={ssRef} style={{ background:digitBg, border:`1px solid ${digitBorder}`, borderRadius:9, padding:'6px 0', fontSize:26, fontWeight:700, color:'#4ade80', fontVariantNumeric:'tabular-nums', width:52, textAlign:'center', opacity:0.65 }}/>
       </div>
-      <div style={{ fontSize:10, color:isDark?'#374151':'#94a3b8', marginTop:7 }}>{date}</div>
+      <div ref={dateRef} style={{ fontSize:10, color:labelColor, marginTop:7 }}/>
     </div>
   )
 }
@@ -128,7 +130,6 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
         { data: ratData },
         { data: regsData },
         { count: todayCount },
-        { count: monthCount },
       ] = await Promise.all([
         supabase.from('companies').select('*',{count:'exact',head:true}).eq('status','approved'),
         supabase.from('reviews').select('*',{count:'exact',head:true}).eq('is_approved',true),
@@ -143,13 +144,12 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
         supabase.from('reviews').select('rating').eq('is_approved',true),
         supabase.from('company_registrations').select('*').order('submitted_at',{ascending:false}).limit(5),
         supabase.from('companies').select('*',{count:'exact',head:true}).gte('created_at',new Date().toISOString().split('T')[0]),
-        supabase.from('companies').select('*',{count:'exact',head:true}).gte('created_at',new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString()),
       ])
 
       const avg = ratData?.length>0 ? (ratData.reduce((s,r)=>s+r.rating,0)/ratData.length).toFixed(1) : '0.0'
       const score = Math.min(100,Math.round((verifiedCo/Math.max(totalCo,1))*40+(parseFloat(avg)/5)*40+Math.min((totalRev||0)/100,1)*20))
 
-      setStats({ companies:totalCo||0, customers:totalCust||0, reviews:totalRev||0, trustScore:score, reports:pendingApps||0, verified:verifiedCo||0, avgRating:avg, today:todayCount||0, thisMonth:monthCount||0 })
+      setStats({ companies:totalCo||0, customers:totalCust||0, reviews:totalRev||0, trustScore:score, reports:pendingApps||0, verified:verifiedCo||0, avgRating:avg, today:todayCount||0 })
 
       const dist = { free:0, silver:0, gold:0, platinum:0 }
       ;(planData||[]).forEach(c => { const p=(c.plan||'free').toLowerCase(); if(dist[p]!==undefined) dist[p]++; else dist.free++ })
@@ -168,7 +168,6 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
     finally { setLoading(false) }
   }
 
-  // ── Theme colors ────────────────────────────────────
   const C = {
     text:   isDark ? '#f0fdf4'                : '#0f172a',
     text2:  isDark ? '#6b7280'                : '#475569',
@@ -178,6 +177,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
     bg:     isDark ? '#0d1117'                : '#f0f4f8',
     row:    isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
     shadow: isDark ? '0 4px 24px rgba(0,0,0,0.25)' : '0 1px 8px rgba(0,0,0,0.06)',
+    bar:    isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
   }
 
   const cardStyle = {
@@ -227,18 +227,18 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
           </div>
           <i className="ti ti-mail" style={{ fontSize:16, color:C.text3 }}/>
           <i className="ti ti-settings" style={{ fontSize:16, color:C.text3 }}/>
-          <Clock isDark={isDark} />
+          <Clock isDark={isDark}/>
         </div>
       </div>
 
       {/* 5 STAT CARDS */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:14 }}>
         {[
-          { label:'Total Customers',  value:stats.customers,  icon:'ti-users',          color:'#38bdf8', trend:[0,1,2,3,4,5],                   change:'+0%',           page:'users' },
+          { label:'Total Customers',  value:stats.customers,  icon:'ti-users',          color:'#38bdf8', trend:[0,1,2,3,4,5],                   change:'+0%',                   page:'users' },
           { label:'Total Businesses', value:stats.companies,  icon:'ti-building-store', color:'#4ade80', trend:activityData,                     change:`+${stats.today} today`, page:'companies' },
-          { label:'Total Reviews',    value:stats.reviews,    icon:'ti-star',           color:'#fbbf24', trend:[0,0,0,0,0,0],                    change:'+0%',           page:'reviews' },
-          { label:'Trust Score',      value:stats.trustScore, icon:'ti-shield-check',   color:'#4ade80', trend:[10,15,20,25,28,stats.trustScore], change:'trend ↗',       page:'trust_score', isScore:true },
-          { label:'Active Reports',   value:stats.reports,    icon:'ti-flag',           color:'#f87171', trend:[3,2,4,3,2,stats.reports],         change:'-0%',           page:'reports' },
+          { label:'Total Reviews',    value:stats.reviews,    icon:'ti-star',           color:'#fbbf24', trend:[0,0,0,0,0,0],                    change:'+0%',                   page:'reviews' },
+          { label:'Trust Score',      value:stats.trustScore, icon:'ti-shield-check',   color:'#4ade80', trend:[10,15,20,25,28,stats.trustScore], change:'trend ↗',               page:'trust_score', isScore:true },
+          { label:'Active Reports',   value:stats.reports,    icon:'ti-flag',           color:'#f87171', trend:[3,2,4,3,2,stats.reports],         change:'-0%',                   page:'reports' },
         ].map((card,i) => (
           <div key={i}
             onClick={() => setPage && setPage(card.page)}
@@ -266,7 +266,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
         {Object.entries(PLAN_CONFIG).map(([key,p]) => (
           <div key={key}
-            onClick={() => { if(setPage&&setPlanFilter) { setPlanFilter(key); setPage('companies') } }}
+            onClick={() => { if(setPage&&setPlanFilter){ setPlanFilter(key); setPage('companies') } }}
             style={{ ...cardStyle, cursor:'pointer', display:'flex', alignItems:'center', gap:14, transition:'all 0.15s', border:`1.5px solid ${C.border}` }}
             onMouseEnter={e=>{ e.currentTarget.style.borderColor=p.color; e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow=`0 6px 20px ${p.color}33` }}
             onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow=C.shadow }}
@@ -385,7 +385,6 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
 
       {/* PLAN DISTRIBUTION + CATEGORY DISTRIBUTION */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
-
         <div style={cardStyle}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <h3 style={{ fontSize:13, fontWeight:600, color:C.text }}>Plan Distribution</h3>
@@ -393,7 +392,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
           </div>
           {Object.entries(PLAN_CONFIG).map(([key,p]) => {
             const count = planDist[key]
-            const total = Object.values(planDist).reduce((a,b)=>a+b,0) || 1
+            const total = Object.values(planDist).reduce((a,b)=>a+b,0)||1
             return (
               <div key={key} style={{ marginBottom:14 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
@@ -406,7 +405,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
                     <span style={{ fontSize:11, color:C.text3, minWidth:36, textAlign:'right' }}>{Math.round(count/total*100)}%</span>
                   </div>
                 </div>
-                <div style={{ height:7, background:isDark?'rgba(255,255,255,0.06)':'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
+                <div style={{ height:7, background:C.bar, borderRadius:4, overflow:'hidden' }}>
                   <div style={{ height:'100%', width:(count/total*100)+'%', background:p.color, borderRadius:4, transition:'width 1.2s ease' }}/>
                 </div>
               </div>
@@ -414,9 +413,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
           })}
           <div style={{ marginTop:14, padding:'10px 14px', background:isDark?'rgba(74,222,128,0.06)':'#f0fdf4', borderRadius:10, display:'flex', justifyContent:'space-between', border:`0.5px solid ${isDark?'rgba(74,222,128,0.15)':'#a7f3d0'}` }}>
             <span style={{ fontSize:12, color:C.text2 }}>Monthly Revenue</span>
-            <span style={{ fontSize:13, fontWeight:700, color:'#4ade80' }}>
-              AED {(planDist.silver*149+planDist.gold*349+planDist.platinum*699).toLocaleString()}/mo
-            </span>
+            <span style={{ fontSize:13, fontWeight:700, color:'#4ade80' }}>AED {(planDist.silver*149+planDist.gold*349+planDist.platinum*699).toLocaleString()}/mo</span>
           </div>
         </div>
 
@@ -425,7 +422,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
             <h3 style={{ fontSize:13, fontWeight:600, color:C.text }}>Category Distribution</h3>
             <span style={{ fontSize:10, color:C.text3, background:C.row, padding:'3px 10px', borderRadius:20, border:`0.5px solid ${C.border}` }}>Live companies</span>
           </div>
-          {catDist.length === 0 ? (
+          {catDist.length===0 ? (
             <div style={{ textAlign:'center', padding:'30px 0' }}>
               <i className="ti ti-chart-donut" style={{ fontSize:36, color:C.text3, display:'block', marginBottom:8 }}/>
               <p style={{ color:C.text3, fontSize:13 }}>No data yet</p>
@@ -434,14 +431,13 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
             <div key={cat} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:13 }}>
               <div style={{ width:8, height:8, borderRadius:'50%', background:catColors[i], flexShrink:0 }}/>
               <span style={{ fontSize:12, flex:1, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cat}</span>
-              <div style={{ width:90, height:6, background:isDark?'rgba(255,255,255,0.06)':'#f1f5f9', borderRadius:3 }}>
+              <div style={{ width:90, height:6, background:C.bar, borderRadius:3 }}>
                 <div style={{ height:'100%', width:(count/Math.max(...catDist.map(c=>c[1]))*100)+'%', background:catColors[i], borderRadius:3 }}/>
               </div>
               <span style={{ fontSize:12, fontWeight:700, color:C.text, minWidth:20, textAlign:'right' }}>{count}</span>
             </div>
           ))}
         </div>
-
       </div>
 
       {/* VERIFICATION TABLE + PLATFORM HEALTH */}
@@ -455,7 +451,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 80px 70px 70px', gap:8, padding:'5px 10px', borderBottom:`0.5px solid ${C.border}`, fontSize:9, fontWeight:700, color:C.text3, letterSpacing:'0.05em', textTransform:'uppercase' }}>
             <span>Business</span><span>Category</span><span>Date</span><span>Status</span>
           </div>
-          {recentApps.length === 0 ? (
+          {recentApps.length===0 ? (
             <div style={{ textAlign:'center', padding:'20px 0', fontSize:11, color:C.text3 }}>No applications yet</div>
           ) : recentApps.slice(0,4).map((app,i) => (
             <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 80px 70px 70px', gap:8, padding:'8px 10px', borderBottom:`0.5px solid ${C.border}`, fontSize:10, color:C.text2, alignItems:'center' }}>
@@ -488,7 +484,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
                 <span style={{ fontSize:11, color:C.text2 }}>{h.label}</span>
                 <span style={{ fontSize:10, color:h.color, fontWeight:600 }}>{h.status}</span>
               </div>
-              <div style={{ height:4, background:isDark?'rgba(255,255,255,0.06)':'#f1f5f9', borderRadius:99, overflow:'hidden' }}>
+              <div style={{ height:4, background:C.bar, borderRadius:99, overflow:'hidden' }}>
                 <div style={{ height:'100%', width:h.pct+'%', background:h.color, borderRadius:99 }}/>
               </div>
             </div>
@@ -507,7 +503,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
               {recentRegs.filter(r=>r.status==='pending').length} pending
             </span>
           </div>
-          {recentRegs.length === 0 ? (
+          {recentRegs.length===0 ? (
             <div style={{ textAlign:'center', padding:'30px 0' }}>
               <i className="ti ti-clipboard-list" style={{ fontSize:36, color:C.text3, display:'block', marginBottom:8 }}/>
               <p style={{ color:C.text3, fontSize:13 }}>No registrations yet</p>
@@ -531,7 +527,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
             <h3 style={{ fontSize:13, fontWeight:600, color:C.text }}>Top Rated Companies</h3>
             <span style={{ fontSize:10, color:C.text3, background:C.row, padding:'3px 10px', borderRadius:20, border:`0.5px solid ${C.border}` }}>By rating</span>
           </div>
-          {topCompanies.length === 0 ? (
+          {topCompanies.length===0 ? (
             <div style={{ textAlign:'center', padding:'30px 0' }}>
               <i className="ti ti-trophy" style={{ fontSize:36, color:C.text3, display:'block', marginBottom:8 }}/>
               <p style={{ color:C.text3, fontSize:13 }}>No companies yet</p>
@@ -567,7 +563,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 110px 100px 80px 110px', gap:8, padding:'5px 10px', borderBottom:`0.5px solid ${C.border}`, fontSize:9, fontWeight:700, color:C.text3, letterSpacing:'0.05em', textTransform:'uppercase' }}>
           <span>Content Preview</span><span>Author</span><span>AI Confidence</span><span>Type</span><span>Actions</span>
         </div>
-        {recentReviews.length === 0 ? (
+        {recentReviews.length===0 ? (
           <div style={{ padding:'16px 10px', fontSize:10, color:C.text3 }}>No reviews in moderation queue.</div>
         ) : recentReviews.slice(0,3).map((r,i) => (
           <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 110px 100px 80px 110px', gap:8, padding:'8px 10px', borderBottom:`0.5px solid ${C.border}`, fontSize:10, color:C.text2, alignItems:'center' }}>
@@ -575,7 +571,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
             <span>@{(r.reviewer_name||'anon').replace(/\s/g,'').toLowerCase()}</span>
             <div>
               <div style={{ fontSize:9, color:'#4ade80', marginBottom:2 }}>94%</div>
-              <div style={{ height:4, background:isDark?'rgba(255,255,255,0.06)':'#f1f5f9', borderRadius:99 }}>
+              <div style={{ height:4, background:C.bar, borderRadius:99 }}>
                 <div style={{ width:'94%', height:'100%', background:'#4ade80', borderRadius:99 }}/>
               </div>
             </div>
@@ -594,7 +590,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme }) {
           <h3 style={{ fontSize:13, fontWeight:600, color:C.text }}>Latest Reviews</h3>
           <span style={{ fontSize:10, color:C.text3, background:C.row, padding:'3px 10px', borderRadius:20, border:`0.5px solid ${C.border}` }}>Last 5</span>
         </div>
-        {recentReviews.length === 0 ? (
+        {recentReviews.length===0 ? (
           <div style={{ textAlign:'center', padding:'30px 0' }}>
             <i className="ti ti-message" style={{ fontSize:36, color:C.text3, display:'block', marginBottom:8 }}/>
             <p style={{ color:C.text3, fontSize:13 }}>No reviews yet</p>
