@@ -15,12 +15,28 @@ import Accounts from './pages/Accounts'
 import Leads from './pages/Leads'
 import Sidebar from './components/Sidebar'
 
+// New empty pages
+import Users from './pages/Users'
+import Reports from './pages/Reports'
+import Disputes from './pages/Disputes'
+import AiModeration from './pages/AiModeration'
+import TrustScoreMonitor from './pages/TrustScoreMonitor'
+import BusinessInsights from './pages/BusinessInsights'
+import SystemHealth from './pages/SystemHealth'
+import Notifications from './pages/Notifications'
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminData, setAdminData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState('dashboard')
+  const [theme, setTheme] = useState(() => localStorage.getItem('admin_theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('admin_theme', theme)
+  }, [theme])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -55,9 +71,9 @@ export default function App() {
   const isAccounts = adminData?.role === 'accounts' || isSuperAdmin
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--sidebar)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
       <div style={{ textAlign: 'center', color: '#fff' }}>
-        <div style={{ fontSize: 28, fontWeight: 600 }}>TrustDubai</div>
+        <div style={{ fontSize: 28, fontWeight: 600 }}>Trust<span style={{ color: '#03C1F5' }}>Dubai</span></div>
         <div style={{ fontSize: 14, opacity: 0.5, marginTop: 4 }}>Loading...</div>
       </div>
     </div>
@@ -66,7 +82,7 @@ export default function App() {
   if (!session) return <Login />
 
   if (!isAdmin) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--sidebar)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
       <div style={{ textAlign: 'center', color: '#fff', padding: 40 }}>
         <i className="ti ti-lock" style={{ fontSize: 48, color: '#ff6b6b', display: 'block', marginBottom: 16 }} />
         <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Access Denied</div>
@@ -80,20 +96,28 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} />
+      <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} theme={theme} setTheme={setTheme} />
       <div style={{ flex: 1, marginLeft: 240, padding: 24, background: 'var(--bg)', minHeight: '100vh' }}>
-        {page === 'dashboard'      && <Dashboard />}
-        {page === 'companies'      && <Companies canAccess={canAccess} />}
-        {page === 'reviews'        && <Reviews canAccess={canAccess} />}
-        {page === 'leads'          && <Leads />}
-        {page === 'categories'     && canAccess('manage_categories') && <Categories />}
-        {page === 'employees'      && canAccess('manage_employees') && <Employees />}
-        {page === 'plans'          && canAccess('manage_plans') && <Plans />}
-        {page === 'bulk'           && canAccess('bulk_upload') && <BulkUpload />}
-        {page === 'team'           && isSuperAdmin && <Team />}
-        {page === 'applications'   && <Applications />}
-        {page === 'plan_approvals' && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
-        {page === 'accounts'       && (isAccounts || isSuperAdmin) && <Accounts />}
+        {page === 'dashboard'         && <Dashboard />}
+        {page === 'companies'         && <Companies canAccess={canAccess} />}
+        {page === 'reviews'           && <Reviews canAccess={canAccess} />}
+        {page === 'leads'             && <Leads />}
+        {page === 'categories'        && canAccess('manage_categories') && <Categories />}
+        {page === 'employees'         && canAccess('manage_employees') && <Employees />}
+        {page === 'plans'             && canAccess('manage_plans') && <Plans />}
+        {page === 'bulk'              && canAccess('bulk_upload') && <BulkUpload />}
+        {page === 'team'              && isSuperAdmin && <Team />}
+        {page === 'applications'      && <Applications />}
+        {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
+        {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}
+        {page === 'users'             && isSuperAdmin && <Users />}
+        {page === 'reports'           && <Reports />}
+        {page === 'disputes'          && <Disputes />}
+        {page === 'ai_moderation'     && isSuperAdmin && <AiModeration />}
+        {page === 'trust_score'       && <TrustScoreMonitor />}
+        {page === 'business_insights' && <BusinessInsights />}
+        {page === 'system_health'     && isSuperAdmin && <SystemHealth />}
+        {page === 'notifications'     && <Notifications />}
       </div>
     </div>
   )
