@@ -22,6 +22,7 @@ import TrustScoreMonitor from './pages/TrustScoreMonitor'
 import BusinessInsights from './pages/BusinessInsights'
 import SystemHealth from './pages/SystemHealth'
 import Notifications from './pages/Notifications'
+import SponsorSlotsPage from './pages/SponsorSlotsPage'
 
 export default function App() {
   const [session,    setSession]    = useState(null)
@@ -134,6 +135,7 @@ export default function App() {
         {page === 'business_insights' && <BusinessInsights />}
         {page === 'system_health'     && isSuperAdmin && <SystemHealth />}
         {page === 'notifications'     && <Notifications />}
+        {page === 'sponsor_slots'     && isSuperAdmin && <SponsorSlotsPage />}
       </div>
     </div>
   )
