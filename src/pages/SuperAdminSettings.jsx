@@ -18,10 +18,20 @@ const PLANS = [
   { key: 'platinum', label: 'Platinum' },
 ]
 
+const SOCIALS = [
+  { key: 'instagram', label: 'Instagram', icon: '📸', ph: 'jaguar_interior  or  https://instagram.com/...' },
+  { key: 'facebook',  label: 'Facebook',  icon: '👍', ph: 'pagename  or  https://facebook.com/...' },
+  { key: 'linkedin',  label: 'LinkedIn',  icon: '💼', ph: 'company-name  or  https://linkedin.com/company/...' },
+  { key: 'twitter',   label: 'Twitter / X', icon: '🐦', ph: 'handle  or  https://twitter.com/...' },
+  { key: 'youtube',   label: 'YouTube',   icon: '▶️', ph: '@channel  or  https://youtube.com/...' },
+]
+
 export default function SuperAdminSettings({ theme = 'dark' }) {
   const isDark = theme === 'dark'
   const [settings, setSettings] = useState({})
   const [limits, setLimits] = useState({})
+  const [socialVals, setSocialVals] = useState({})
+  const [savingSocial, setSavingSocial] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [msg, setMsg] = useState('')
@@ -39,6 +49,10 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     const lm = {}
     ;(pl || []).forEach(r => { lm[r.plan] = r.staff_limit })
     setLimits(lm)
+
+    const { data: soc } = await supabase
+      .from('app_settings').select('value').eq('key', 'trustdubai.social').maybeSingle()
+    setSocialVals(soc?.value || {})
 
     setLoading(false)
   }, [])
@@ -81,6 +95,24 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     setLimits(p => ({ ...p, [plan]: n }))
     setMsg('Saved ✓')
     setTimeout(() => setMsg(''), 1500)
+  }
+
+  async function saveSocial() {
+    setSavingSocial(true); setMsg('')
+    // clean empty values
+    const cleaned = {}
+    Object.entries(socialVals).forEach(([k, v]) => { if (v && v.trim()) cleaned[k] = v.trim() })
+
+    // upsert into app_settings (key may or may not exist yet)
+    const { data, error } = await supabase.from('app_settings')
+      .upsert({ key: 'trustdubai.social', value: cleaned, section: 'general', updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .select()
+
+    setSavingSocial(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission (is_admin check).'); return }
+    setMsg('Social links saved ✓')
+    setTimeout(() => setMsg(''), 1800)
   }
 
   const card = {
@@ -156,6 +188,38 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
         <p style={{ fontSize: 11, color: txt3, marginTop: 12 }}>
           Tip: change the number and click away to save.
         </p>
+      </div>
+
+      {/* TRUSTDUBAI SOCIAL LINKS */}
+      <div style={card}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: GREEN, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          TrustDubai Social Links
+        </div>
+        <p style={{ fontSize: 12, color: txt3, marginTop: 0, marginBottom: 16 }}>
+          These appear as the “Follow Us” icons in the public profile footer. Paste a full URL or just the handle/username — both work. Leave blank to hide that icon.
+        </p>
+        {SOCIALS.map((s, i) => (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 0', borderTop: i > 0 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9'}` : 'none' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, background: isDark ? '#0d1117' : '#f1f5f9', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}` }}>{s.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: txt, marginBottom: 4 }}>{s.label}</div>
+              <input
+                value={socialVals[s.key] || ''}
+                onChange={e => setSocialVals(p => ({ ...p, [s.key]: e.target.value }))}
+                placeholder={s.ph}
+                style={{ width: '100%', padding: '8px 11px', borderRadius: 8, fontSize: 13,
+                  background: isDark ? '#0d1117' : '#f8fafc', color: txt,
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+        ))}
+        <button onClick={saveSocial} disabled={savingSocial}
+          style={{ marginTop: 16, padding: '10px 22px', background: GREEN, color: '#fff', border: 'none',
+            borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: savingSocial ? 'not-allowed' : 'pointer', opacity: savingSocial ? 0.6 : 1 }}>
+          {savingSocial ? 'Saving…' : 'Save Social Links'}
+        </button>
       </div>
     </div>
   )
