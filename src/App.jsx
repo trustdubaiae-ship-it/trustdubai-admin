@@ -23,6 +23,7 @@ import BusinessInsights from './pages/BusinessInsights'
 import SystemHealth from './pages/SystemHealth'
 import Notifications from './pages/Notifications'
 import SponsorSlotsPage from './pages/SponsorSlotsPage'
+import SuperAdminSettings from './pages/SuperAdminSettings'
 
 export default function App() {
   const [session,    setSession]    = useState(null)
@@ -136,6 +137,7 @@ export default function App() {
         {page === 'system_health'     && isSuperAdmin && <SystemHealth />}
         {page === 'notifications'     && <Notifications />}
         {page === 'sponsor_slots'     && isSuperAdmin && <SponsorSlotsPage />}
+        {page === 'settings'          && isSuperAdmin && <SuperAdminSettings theme={theme} />}
       </div>
     </div>
   )
