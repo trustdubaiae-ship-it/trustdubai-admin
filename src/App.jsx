@@ -24,6 +24,7 @@ import SystemHealth from './pages/SystemHealth'
 import Notifications from './pages/Notifications'
 import SponsorSlotsPage from './pages/SponsorSlotsPage'
 import SuperAdminSettings from './pages/SuperAdminSettings'
+import BadgeManager from './pages/BadgeManager'
 
 export default function App() {
   const [session,    setSession]    = useState(null)
@@ -138,6 +139,7 @@ export default function App() {
         {page === 'notifications'     && <Notifications />}
         {page === 'sponsor_slots'     && isSuperAdmin && <SponsorSlotsPage />}
         {page === 'settings'          && isSuperAdmin && <SuperAdminSettings theme={theme} />}
+        {page === 'badges_manager'    && isSuperAdmin && <BadgeManager theme={theme} />}
       </div>
     </div>
   )
