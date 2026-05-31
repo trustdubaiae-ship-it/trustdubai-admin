@@ -15,11 +15,9 @@ export default function VerificationQueue() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
-  const [signed, setSigned] = useState({}) // path -> url
 
   async function load() {
     setLoading(true)
-    // Jin companies ne kuch na kuch submit kiya hai (doc ya phone pending)
     const { data, error } = await supabase
       .from('companies')
       .select('id, name, owner_email, trade_license_number, trade_license_url, trade_license_status, owner_eid_url, owner_eid_status, phone, phone_verified, verification_percent, verification_status')
@@ -33,17 +31,12 @@ export default function VerificationQueue() {
 
   async function viewDoc(path) {
     if (!path) return
-    if (signed[path]) { window.open(signed[path], '_blank'); return }
-    const { data, error } = await supabase.storage
-      .from(BUCKET).createSignedUrl(path, 120)
-    if (!error && data?.signedUrl) {
-      setSigned((s) => ({ ...s, [path]: data.signedUrl }))
-      window.open(data.signedUrl, '_blank')
-    }
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 120)
+    if (!error && data?.signedUrl) window.open(data.signedUrl, '_blank')
+    else alert('Could not open document.')
   }
 
   async function setDocStatus(company, kind, status) {
-    // kind: 'trade_license' | 'owner_eid', status: 'approved' | 'rejected'
     let reason = null
     if (status === 'rejected') {
       reason = window.prompt('Rejection reason (company ko dikhega):', '')
@@ -84,17 +77,17 @@ export default function VerificationQueue() {
     setBusy('')
   }
 
-  if (loading) return <div style={{ padding: 24 }}>Loading queue…</div>
+  if (loading) return <div style={{ padding: 24, color: '#94a3b8' }}>Loading queue…</div>
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Company Verification Queue</h1>
-      <p style={{ color: '#667', marginBottom: 20 }}>
+    <div style={{ padding: 24, maxWidth: 1000 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4, color: '#f0fdf4' }}>Company Verification Queue</h1>
+      <p style={{ color: '#94a3b8', marginBottom: 20, fontSize: 14 }}>
         Approve / reject documents. Phone is verified manually. Score auto-updates.
       </p>
 
       {rows.length === 0 && (
-        <div style={{ background: '#fff', border: '1px solid #e6e9ee', borderRadius: 12, padding: 24, color: '#778' }}>
+        <div style={{ background: '#161b22', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 24, color: '#94a3b8' }}>
           No submissions yet.
         </div>
       )}
@@ -102,18 +95,17 @@ export default function VerificationQueue() {
       {rows.map((c) => {
         const verified = c.verification_status === 'verified'
         return (
-          <div key={c.id} style={{ background: '#fff', border: '1px solid #e6e9ee', borderRadius: 12, padding: 18, marginBottom: 16 }}>
-            {/* Header */}
+          <div key={c.id} style={{ background: '#161b22', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 18, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{c.name || 'Unnamed company'}</div>
-                <div style={{ fontSize: 13, color: '#778' }}>{c.owner_email}</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#f0fdf4' }}>{c.name || 'Unnamed company'}</div>
+                <div style={{ fontSize: 13, color: '#6b7280' }}>{c.owner_email}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ color: BRAND, fontWeight: 700 }}>{c.verification_percent ?? 0}% / 22%</span>
                 <span style={{
-                  background: verified ? '#e6f7ed' : '#fff6e6',
-                  color: verified ? '#1a7f4b' : '#b8860b',
+                  background: verified ? 'rgba(26,127,75,0.15)' : 'rgba(184,134,11,0.15)',
+                  color: verified ? '#4ade80' : '#fbbf24',
                   padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 600,
                 }}>
                   {verified ? '✓ Verified' : 'Not verified'}
@@ -121,7 +113,6 @@ export default function VerificationQueue() {
               </div>
             </div>
 
-            {/* Trade License */}
             <DocRow
               title="Trade License" weight={10} required
               number={c.trade_license_number} status={c.trade_license_status}
@@ -131,7 +122,6 @@ export default function VerificationQueue() {
               busy={busy === c.id + 'trade_license'}
             />
 
-            {/* Owner EID */}
             <DocRow
               title="Owner Emirates ID" weight={7}
               status={c.owner_eid_status} url={c.owner_eid_url} onView={viewDoc}
@@ -140,18 +130,18 @@ export default function VerificationQueue() {
               busy={busy === c.id + 'owner_eid'}
             />
 
-            {/* Phone */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid #f0f2f5' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <div>
-                <span style={{ fontWeight: 600 }}>Phone</span>
+                <span style={{ fontWeight: 600, color: '#e5e7eb' }}>Phone</span>
                 <span style={{ color: BRAND, marginLeft: 8, fontSize: 12, fontWeight: 600 }}>+5%</span>
-                <span style={{ marginLeft: 10, fontSize: 13, color: '#778' }}>{c.phone || '—'}</span>
+                <span style={{ marginLeft: 10, fontSize: 13, color: '#6b7280' }}>{c.phone || '—'}</span>
               </div>
               <button
                 onClick={() => togglePhone(c)}
                 disabled={busy === c.id + 'phone'}
                 style={{
-                  background: c.phone_verified ? '#fdecec' : BRAND, color: '#fff',
+                  background: c.phone_verified ? 'rgba(248,113,113,0.15)' : BRAND,
+                  color: c.phone_verified ? '#f87171' : '#fff',
                   border: 'none', padding: '7px 14px', borderRadius: 8, fontWeight: 600,
                   fontSize: 13, cursor: 'pointer',
                 }}>
@@ -168,15 +158,15 @@ export default function VerificationQueue() {
 function DocRow({ title, weight, required, number, status, url, onView, onApprove, onReject, busy }) {
   const st = DOC_STATUS[status] || DOC_STATUS.pending
   return (
-    <div style={{ padding: '12px 0', borderTop: '1px solid #f0f2f5' }}>
+    <div style={{ padding: '12px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <span style={{ fontWeight: 600 }}>{title}</span>
+          <span style={{ fontWeight: 600, color: '#e5e7eb' }}>{title}</span>
           {required
-            ? <span style={{ color: '#c0392b', marginLeft: 6, fontSize: 12 }}>*</span>
-            : <span style={{ color: '#999', marginLeft: 6, fontSize: 12 }}>(optional)</span>}
+            ? <span style={{ color: '#f87171', marginLeft: 6, fontSize: 12 }}>*</span>
+            : <span style={{ color: '#6b7280', marginLeft: 6, fontSize: 12 }}>(optional)</span>}
           <span style={{ color: BRAND, marginLeft: 8, fontSize: 12, fontWeight: 600 }}>+{weight}%</span>
-          {number && <span style={{ marginLeft: 10, fontSize: 13, color: '#778' }}>#{number}</span>}
+          {number && <span style={{ marginLeft: 10, fontSize: 13, color: '#6b7280' }}>#{number}</span>}
         </div>
         <span style={{ background: st.bg, color: st.color, padding: '4px 10px', borderRadius: 16, fontSize: 12, fontWeight: 600 }}>
           {st.label}
@@ -190,13 +180,13 @@ function DocRow({ title, weight, required, number, status, url, onView, onApprov
             <button onClick={onReject} disabled={busy} style={btnReject}>Reject</button>
           </>
         ) : (
-          <span style={{ fontSize: 13, color: '#aab' }}>Not uploaded yet</span>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>Not uploaded yet</span>
         )}
       </div>
     </div>
   )
 }
 
-const btnGhost = { background: '#fff', border: '1px solid #d8dde4', color: '#334', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const btnGhost   = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e7eb', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const btnApprove = { background: '#1a7f4b', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
-const btnReject = { background: '#c0392b', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const btnReject  = { background: '#c0392b', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
