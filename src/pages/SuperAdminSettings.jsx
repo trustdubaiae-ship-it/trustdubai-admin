@@ -4,7 +4,6 @@ import { supabase } from '../supabase'
 
 const GREEN = '#1d9e75'
 
-// feature toggles jo app_settings mein hain
 const FEATURES = [
   { key: 'feature.ai_analysis',     label: 'AI Analysis on Reviews', desc: 'Show AI analysis under each review comment' },
   { key: 'feature.google_reviews',  label: 'Google Reviews Strip',   desc: 'Master switch for Google reviews on public profiles' },
@@ -21,22 +20,20 @@ const PLANS = [
 
 export default function SuperAdminSettings({ theme = 'dark' }) {
   const isDark = theme === 'dark'
-  const [settings, setSettings] = useState({})   // key -> {enabled}
-  const [limits, setLimits] = useState({})        // plan -> staff_limit
+  const [settings, setSettings] = useState({})
+  const [limits, setLimits] = useState({})
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState('')         // which key is saving
+  const [saving, setSaving] = useState('')
   const [msg, setMsg] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
-    // feature settings
     const { data: s } = await supabase
       .from('app_settings').select('key, value').eq('section', 'features')
     const map = {}
     ;(s || []).forEach(r => { map[r.key] = r.value })
     setSettings(map)
 
-    // plan limits
     const { data: pl } = await supabase
       .from('plan_limits').select('plan, staff_limit')
     const lm = {}
@@ -52,23 +49,35 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     const current = settings[key]?.enabled === true
     const next = { enabled: !current }
     setSaving(key); setMsg('')
-    const { error } = await supabase.from('app_settings')
+
+    const { data, error } = await supabase.from('app_settings')
       .update({ value: next, updated_at: new Date().toISOString() })
       .eq('key', key)
+      .select()   // 👈 select() taaki pata chale row update hui ya nahi
+
     setSaving('')
+
     if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) {
+      setMsg('Save failed — no permission to update settings (admin check). Key: ' + key)
+      return
+    }
     setSettings(p => ({ ...p, [key]: next }))
+    setMsg('Saved ✓')
+    setTimeout(() => setMsg(''), 1500)
   }
 
   async function saveLimit(plan, val) {
     const n = parseInt(val, 10)
     if (isNaN(n) || n < 0) return
     setSaving(plan); setMsg('')
-    const { error } = await supabase.from('plan_limits')
+    const { data, error } = await supabase.from('plan_limits')
       .update({ staff_limit: n, updated_at: new Date().toISOString() })
       .eq('plan', plan)
+      .select()
     setSaving('')
     if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission. Plan: ' + plan); return }
     setLimits(p => ({ ...p, [plan]: n }))
     setMsg('Saved ✓')
     setTimeout(() => setMsg(''), 1500)
@@ -93,7 +102,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
       </p>
 
       {msg && (
-        <div style={{ marginBottom: 16, fontSize: 13, color: msg.startsWith('Error') ? '#f87171' : GREEN }}>{msg}</div>
+        <div style={{ marginBottom: 16, fontSize: 13, fontWeight: 600, color: msg.startsWith('Error') || msg.startsWith('Save failed') ? '#f87171' : GREEN }}>{msg}</div>
       )}
 
       {/* FEATURE TOGGLES */}
