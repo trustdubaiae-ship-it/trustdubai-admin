@@ -43,7 +43,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { section: 'SYSTEM' },
     { id: 'team',              icon: 'ti-crown',             label: 'Team',               show: isSuperAdmin },
     { id: 'system_health',     icon: 'ti-server',            label: 'System Health',      show: isSuperAdmin },
-    { id: 'system_health',     icon: 'ti-settings',          label: 'Settings',           show: isSuperAdmin },
+    { id: 'settings',          icon: 'ti-settings',          label: 'Settings',           show: isSuperAdmin },
     { id: 'system_health',     icon: 'ti-lock',              label: 'Roles & Perms',      show: isSuperAdmin },
     { id: 'system_health',     icon: 'ti-notes',             label: 'Logs',               show: isSuperAdmin },
     { id: 'system_health',     icon: 'ti-api',               label: 'API Management',     show: isSuperAdmin },
@@ -109,7 +109,6 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
               {item.section}
             </div>
           )
-          const isActive = page === item.id && MENU.findIndex(m=>m.id===item.id&&m.label===item.label) === MENU.findIndex(m=>m.id===page&&!m.section)
           const activeStyle = page === item.id
           return (
             <div key={`${item.id}-${i}`} onClick={() => setPage(item.id)}
