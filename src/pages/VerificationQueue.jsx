@@ -17,7 +17,6 @@ export default function VerificationQueue({ theme }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
 
-  // Theme-aware colors
   const C = {
     title:    isDark ? '#f0fdf4' : '#0f172a',
     sub:      isDark ? '#94a3b8' : '#64748b',
@@ -52,7 +51,7 @@ export default function VerificationQueue({ theme }) {
   async function setDocStatus(company, kind, status) {
     let reason = null
     if (status === 'rejected') {
-      reason = window.prompt('Rejection reason (company ko dikhega):', '')
+      reason = window.prompt('Rejection reason (visible to company):', '')
       if (reason === null) return
     }
     setBusy(company.id + kind)
@@ -170,6 +169,7 @@ export default function VerificationQueue({ theme }) {
 
 function DocRow({ title, weight, required, number, status, url, onView, onApprove, onReject, busy, C }) {
   const st = DOC_STATUS[status] || DOC_STATUS.pending
+  const decided = status === 'approved' || status === 'rejected'
   return (
     <div style={{ padding: '12px 0', borderTop: `1px solid ${C.rowBorder}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -185,15 +185,25 @@ function DocRow({ title, weight, required, number, status, url, onView, onApprov
           {st.label}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        {url ? (
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {!url ? (
+          <span style={{ fontSize: 13, color: C.muted }}>Not uploaded yet</span>
+        ) : !decided ? (
+          // Pending → View + Approve + Reject
           <>
             <button onClick={() => onView(url)} style={btnGhost(C)}>View document</button>
             <button onClick={onApprove} disabled={busy} style={btnApprove}>Approve</button>
             <button onClick={onReject} disabled={busy} style={btnReject}>Reject</button>
           </>
         ) : (
-          <span style={{ fontSize: 13, color: C.muted }}>Not uploaded yet</span>
+          // Already decided → View + small change option
+          <>
+            <button onClick={() => onView(url)} style={btnGhost(C)}>View document</button>
+            {status === 'approved'
+              ? <button onClick={onReject} disabled={busy} style={btnLink('#dc2626')}>Change to Reject</button>
+              : <button onClick={onApprove} disabled={busy} style={btnLink('#1a7f4b')}>Change to Approve</button>}
+          </>
         )}
       </div>
     </div>
@@ -203,3 +213,4 @@ function DocRow({ title, weight, required, number, status, url, onView, onApprov
 const btnGhost   = (C) => ({ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.label, padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' })
 const btnApprove = { background: '#1a7f4b', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const btnReject  = { background: '#c0392b', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }
+const btnLink    = (color) => ({ background: 'transparent', border: 'none', color, padding: '7px 4px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' })
