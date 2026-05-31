@@ -46,8 +46,19 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   useEffect(() => { load() }, [load])
 
   async function runDebug() {
-    const { data, error } = await supabase.rpc('debug_whoami')
-    alert('DEBUG:\n' + JSON.stringify(data, null, 2) + '\n\nERROR: ' + (error ? error.message : 'none'))
+    // 1. server-side forced update test (RLS ke saath)
+    const { data: rpc, error: rpcErr } = await supabase.rpc('debug_toggle_ai_insights')
+    // 2. direct client update test (jaise toggle karta hai)
+    const { data: upd, error: updErr } = await supabase.from('app_settings')
+      .update({ value: { enabled: true }, updated_at: new Date().toISOString() })
+      .eq('key', 'feature.ai_insights')
+      .select()
+    alert(
+      'RPC update (server):\n' + JSON.stringify(rpc, null, 2) + '\nRPC err: ' + (rpcErr ? rpcErr.message : 'none') +
+      '\n\nDIRECT client update rows: ' + (upd ? upd.length : 'null') +
+      '\nDirect data: ' + JSON.stringify(upd, null, 2) +
+      '\nDirect err: ' + (updErr ? updErr.message : 'none')
+    )
   }
 
   async function toggleFeature(key) {
@@ -109,7 +120,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
       {/* TEMPORARY DEBUG BUTTON */}
       <button onClick={runDebug}
         style={{ marginBottom: 20, padding: '8px 16px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-        🔍 Debug: Who am I?
+        🔍 Debug: Test Update
       </button>
 
       {msg && (
