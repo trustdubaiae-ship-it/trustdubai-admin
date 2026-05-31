@@ -128,7 +128,7 @@ export default function App() {
         {page === 'bulk'              && canAccess('bulk_upload')       && <BulkUpload />}
         {page === 'team'              && isSuperAdmin && <Team />}
         {page === 'applications'      && <Applications />}
-        {page === 'verification'      && <VerificationQueue />}
+        {page === 'verification'      && <VerificationQueue theme={theme} adminData={adminData} />}
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
         {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}
         {page === 'users'             && isSuperAdmin && <Users />}
