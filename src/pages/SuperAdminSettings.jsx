@@ -45,6 +45,11 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
 
   useEffect(() => { load() }, [load])
 
+  async function runDebug() {
+    const { data, error } = await supabase.rpc('debug_whoami')
+    alert('DEBUG:\n' + JSON.stringify(data, null, 2) + '\n\nERROR: ' + (error ? error.message : 'none'))
+  }
+
   async function toggleFeature(key) {
     const current = settings[key]?.enabled === true
     const next = { enabled: !current }
@@ -53,13 +58,13 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     const { data, error } = await supabase.from('app_settings')
       .update({ value: next, updated_at: new Date().toISOString() })
       .eq('key', key)
-      .select()   // 👈 select() taaki pata chale row update hui ya nahi
+      .select()
 
     setSaving('')
 
     if (error) { setMsg('Error: ' + error.message); return }
     if (!data || data.length === 0) {
-      setMsg('Save failed — no permission to update settings (admin check). Key: ' + key)
+      setMsg('Save failed — no permission to update settings (is_admin check). Key: ' + key)
       return
     }
     setSettings(p => ({ ...p, [key]: next }))
@@ -97,9 +102,15 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   return (
     <div style={{ maxWidth: 760 }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, color: txt, margin: '4px 0 4px' }}>Global Settings</h1>
-      <p style={{ fontSize: 13, color: txt2, marginBottom: 24 }}>
+      <p style={{ fontSize: 13, color: txt2, marginBottom: 16 }}>
         Platform-wide defaults. Per-company overrides are managed inside each company.
       </p>
+
+      {/* TEMPORARY DEBUG BUTTON */}
+      <button onClick={runDebug}
+        style={{ marginBottom: 20, padding: '8px 16px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        🔍 Debug: Who am I?
+      </button>
 
       {msg && (
         <div style={{ marginBottom: 16, fontSize: 13, fontWeight: 600, color: msg.startsWith('Error') || msg.startsWith('Save failed') ? '#f87171' : GREEN }}>{msg}</div>
