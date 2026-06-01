@@ -8,6 +8,7 @@ import Categories from './pages/Categories'
 import Employees from './pages/Employees'
 import BulkUpload from './pages/BulkUpload'
 import Plans from './pages/Plans'
+import PlanFeatures from './pages/PlanFeatures'
 import Team from './pages/Team'
 import Applications from './pages/ApplicationsPage'
 import PlanApprovals from './pages/PlanApprovals'
@@ -125,6 +126,7 @@ export default function App() {
         {page === 'categories'        && canAccess('manage_categories') && <Categories />}
         {page === 'employees'         && canAccess('manage_employees')  && <Employees />}
         {page === 'plans'             && canAccess('manage_plans')      && <Plans />}
+        {page === 'plan_features'     && isSuperAdmin && <PlanFeatures />}
         {page === 'bulk'              && canAccess('bulk_upload')       && <BulkUpload />}
         {page === 'team'              && isSuperAdmin && <Team />}
         {page === 'applications'      && <Applications />}
