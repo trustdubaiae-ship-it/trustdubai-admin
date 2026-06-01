@@ -207,10 +207,7 @@ export default function ApplicationsPage() {
     setProcessing(true)
     const cl = checklists[app.id] || {}
 
-    const slug = app.company_name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '')
+    const email = (app.email || '').trim().toLowerCase()
 
     // 1. Update application status
     const { error } = await supabase.from('company_applications').update({
@@ -224,11 +221,26 @@ export default function ApplicationsPage() {
 
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
 
+    // SAFETY: agar email hi nahi hai to company row mat banao (warna blank-email duplicate ban jaata hai)
+    if (!email) {
+      setProcessing(false)
+      alert('⚠️ Application approved, but no email is on file — so no company account was created. Add an email to this application, then approve again to create the business portal account.')
+      const tpl = buildApprovalEmail(app)
+      setEmailModal({ app, type: 'approval', ...tpl })
+      fetchApps()
+      return
+    }
+
+    const slug = app.company_name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
     // 2. Check if company already exists by owner_email (pending row created at List Biz)
     const { data: existing } = await supabase
       .from('companies')
       .select('id')
-      .ilike('owner_email', app.email)
+      .ilike('owner_email', email)
       .maybeSingle()
 
     if (existing) {
@@ -251,9 +263,9 @@ export default function ApplicationsPage() {
         area: app.location || '',
         phone: app.phone || '',
         whatsapp: app.whatsapp || app.phone || '',
-        email: app.email || '',
-        business_email: app.email || '',
-        owner_email: app.email || '',
+        email: email,
+        business_email: email,
+        owner_email: email,
         description: app.description || '',
         website: app.website || '',
         slug,
@@ -275,6 +287,7 @@ export default function ApplicationsPage() {
     if (!rejectReason.trim()) { alert('Please enter rejection reason'); return }
     setProcessing(true)
     const cl = checklists[app.id] || {}
+    const email = (app.email || '').trim().toLowerCase()
     const { error } = await supabase.from('company_applications').update({
       status: 'rejected', rejection_reason: rejectReason,
       reviewed_at: new Date().toISOString(),
@@ -284,10 +297,12 @@ export default function ApplicationsPage() {
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
 
     // also mark companies pending row as rejected (so portal shows rejected state)
-    await supabase.from('companies').update({
-      status: 'rejected',
-      rejection_reason: rejectReason,
-    }).ilike('owner_email', app.email)
+    if (email) {
+      await supabase.from('companies').update({
+        status: 'rejected',
+        rejection_reason: rejectReason,
+      }).ilike('owner_email', email)
+    }
 
     setRejectingId(null); setProcessing(false)
     const tpl = buildRejectionEmail(app, rejectReason, cl, clNotes[app.id] || {})
