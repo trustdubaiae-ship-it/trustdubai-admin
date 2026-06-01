@@ -11,6 +11,7 @@ import Plans from './pages/Plans'
 import PlanFeatures from './pages/PlanFeatures'
 import Team from './pages/Team'
 import TeamVerification from './pages/TeamVerification'
+import DocumentVerification from './pages/DocumentVerification'
 import Applications from './pages/ApplicationsPage'
 import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
@@ -131,6 +132,7 @@ export default function App() {
         {page === 'bulk'              && canAccess('bulk_upload')       && <BulkUpload />}
         {page === 'team'              && isSuperAdmin && <Team />}
         {page === 'team_verification' && <TeamVerification theme={theme} adminData={adminData} />}
+        {page === 'doc_verification'  && <DocumentVerification theme={theme} adminData={adminData} />}
         {page === 'applications'      && <Applications />}
         {page === 'verification'      && <VerificationQueue theme={theme} adminData={adminData} />}
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
