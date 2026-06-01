@@ -32,6 +32,8 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   const [limits, setLimits] = useState({})
   const [socialVals, setSocialVals] = useState({})
   const [savingSocial, setSavingSocial] = useState(false)
+  const [policyTerms, setPolicyTerms] = useState([])
+  const [savingPolicy, setSavingPolicy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [msg, setMsg] = useState('')
@@ -53,6 +55,10 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     const { data: soc } = await supabase
       .from('app_settings').select('value').eq('key', 'trustdubai.social').maybeSingle()
     setSocialVals(soc?.value || {})
+
+    const { data: pol } = await supabase
+      .from('app_settings').select('value').eq('key', 'trustdubai.policy').maybeSingle()
+    setPolicyTerms(pol?.value?.terms || [])
 
     setLoading(false)
   }, [])
@@ -99,11 +105,9 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
 
   async function saveSocial() {
     setSavingSocial(true); setMsg('')
-    // clean empty values
     const cleaned = {}
     Object.entries(socialVals).forEach(([k, v]) => { if (v && v.trim()) cleaned[k] = v.trim() })
 
-    // upsert into app_settings (key may or may not exist yet)
     const { data, error } = await supabase.from('app_settings')
       .upsert({ key: 'trustdubai.social', value: cleaned, section: 'general', updated_at: new Date().toISOString() }, { onConflict: 'key' })
       .select()
@@ -115,6 +119,34 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     setTimeout(() => setMsg(''), 1800)
   }
 
+  // ---- Terms & Policy ----
+  function updateTerm(i, field, val) {
+    setPolicyTerms(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: val } : t))
+  }
+  function addTerm() {
+    setPolicyTerms(prev => [...prev, { title: '', text: '' }])
+  }
+  function removeTerm(i) {
+    if (!confirm('Remove this term?')) return
+    setPolicyTerms(prev => prev.filter((_, idx) => idx !== i))
+  }
+  async function savePolicy() {
+    const cleaned = policyTerms
+      .map(t => ({ title: (t.title || '').trim(), text: (t.text || '').trim() }))
+      .filter(t => t.title || t.text)
+    setSavingPolicy(true); setMsg('')
+    const value = { version: '1.0', updated_at: new Date().toISOString().slice(0, 10), terms: cleaned }
+    const { data, error } = await supabase.from('app_settings')
+      .upsert({ key: 'trustdubai.policy', value, section: 'general', updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .select()
+    setSavingPolicy(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission.'); return }
+    setPolicyTerms(cleaned)
+    setMsg('Policy saved ✓ — updated everywhere')
+    setTimeout(() => setMsg(''), 2200)
+  }
+
   const card = {
     background: isDark ? '#161b22' : '#fff',
     border: `0.5px solid ${isDark ? 'rgba(255,255,255,0.07)' : '#e2e8f0'}`,
@@ -123,6 +155,10 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   const txt  = isDark ? '#f0fdf4' : '#0f172a'
   const txt2 = isDark ? '#94a3b8' : '#64748b'
   const txt3 = isDark ? '#64748b' : '#94a3b8'
+  const inputBase = {
+    background: isDark ? '#0d1117' : '#f8fafc', color: txt,
+    border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, outline: 'none', boxSizing: 'border-box',
+  }
 
   if (loading) return <div style={{ padding: 24, color: txt3 }}>Loading settings…</div>
 
@@ -178,9 +214,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
               <input type="number" min="0" defaultValue={limits[p.key] ?? 1}
                 onBlur={(e) => { if (parseInt(e.target.value,10) !== limits[p.key]) saveLimit(p.key, e.target.value) }}
                 disabled={saving === p.key}
-                style={{ width: 70, padding: '7px 10px', borderRadius: 8, fontSize: 13, textAlign: 'center',
-                  background: isDark ? '#0d1117' : '#f8fafc', color: txt,
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, outline: 'none' }} />
+                style={{ width: 70, padding: '7px 10px', borderRadius: 8, fontSize: 13, textAlign: 'center', ...inputBase }} />
               <span style={{ fontSize: 12, color: txt3 }}>staff</span>
             </div>
           </div>
@@ -188,6 +222,51 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
         <p style={{ fontSize: 11, color: txt3, marginTop: 12 }}>
           Tip: change the number and click away to save.
         </p>
+      </div>
+
+      {/* TERMS & POLICY */}
+      <div style={card}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: GREEN, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          Terms & Policy
+        </div>
+        <p style={{ fontSize: 12, color: txt3, marginTop: 0, marginBottom: 16 }}>
+          These terms appear wherever users agree to the TrustDubai Policy (business registration, team EID upload, business listing). Edit here once — it updates everywhere automatically.
+        </p>
+
+        {policyTerms.length === 0 && (
+          <div style={{ fontSize: 13, color: txt3, padding: '12px 0' }}>No terms yet. Click “Add Term” to create one.</div>
+        )}
+
+        {policyTerms.map((t, i) => (
+          <div key={i} style={{ border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`, borderRadius: 11, padding: 14, marginBottom: 12, background: isDark ? '#0d1117' : '#f8fafc' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 22, height: 22, borderRadius: 6, background: GREEN, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+              <input
+                value={t.title || ''}
+                onChange={e => updateTerm(i, 'title', e.target.value)}
+                placeholder="Term title (e.g. Document Authenticity)"
+                style={{ flex: 1, padding: '8px 11px', borderRadius: 8, fontSize: 13, fontWeight: 600, ...inputBase }} />
+              <button onClick={() => removeTerm(i)} title="Remove term"
+                style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, background: 'transparent', color: '#f87171', cursor: 'pointer', flexShrink: 0, fontSize: 14 }}>🗑️</button>
+            </div>
+            <textarea
+              value={t.text || ''}
+              onChange={e => updateTerm(i, 'text', e.target.value)}
+              placeholder="Term text / description…"
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, minHeight: 70, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, ...inputBase }} />
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+          <button onClick={addTerm}
+            style={{ padding: '9px 16px', background: 'transparent', color: GREEN, border: `1px solid ${GREEN}`, borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            + Add Term
+          </button>
+          <button onClick={savePolicy} disabled={savingPolicy}
+            style={{ padding: '9px 22px', background: GREEN, color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: savingPolicy ? 'not-allowed' : 'pointer', opacity: savingPolicy ? 0.6 : 1 }}>
+            {savingPolicy ? 'Saving…' : 'Save Policy'}
+          </button>
+        </div>
       </div>
 
       {/* TRUSTDUBAI SOCIAL LINKS */}
@@ -209,9 +288,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
                 value={socialVals[s.key] || ''}
                 onChange={e => setSocialVals(p => ({ ...p, [s.key]: e.target.value }))}
                 placeholder={s.ph}
-                style={{ width: '100%', padding: '8px 11px', borderRadius: 8, fontSize: 13,
-                  background: isDark ? '#0d1117' : '#f8fafc', color: txt,
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '8px 11px', borderRadius: 8, fontSize: 13, ...inputBase }} />
             </div>
           </div>
         ))}
