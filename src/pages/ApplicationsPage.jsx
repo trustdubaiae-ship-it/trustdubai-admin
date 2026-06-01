@@ -207,7 +207,6 @@ export default function ApplicationsPage() {
     setProcessing(true)
     const cl = checklists[app.id] || {}
 
-    // Auto generate slug from company name
     const slug = app.company_name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -225,15 +224,26 @@ export default function ApplicationsPage() {
 
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
 
-    // 2. Check if company already exists by email
+    // 2. Check if company already exists by owner_email (pending row created at List Biz)
     const { data: existing } = await supabase
       .from('companies')
       .select('id')
-      .eq('owner_email', app.email)
+      .ilike('owner_email', app.email)
       .maybeSingle()
 
-    if (!existing) {
-      // 3. Insert into companies table with slug
+    if (existing) {
+      // 3a. Company pending row already exists → UPDATE to approved (full unlock)
+      const { error: updErr } = await supabase.from('companies').update({
+        status: 'approved',
+        is_verified: false,
+        category: app.category || '',
+        location: app.location || '',
+        phone: app.phone || '',
+        whatsapp: app.whatsapp || app.phone || '',
+      }).eq('id', existing.id)
+      if (updErr) alert('Application approved but company update failed: ' + updErr.message)
+    } else {
+      // 3b. No company row → INSERT approved
       const { error: insertError } = await supabase.from('companies').insert({
         name: app.company_name,
         category: app.category || '',
@@ -242,6 +252,7 @@ export default function ApplicationsPage() {
         phone: app.phone || '',
         whatsapp: app.whatsapp || app.phone || '',
         email: app.email || '',
+        business_email: app.email || '',
         owner_email: app.email || '',
         description: app.description || '',
         website: app.website || '',
@@ -251,9 +262,7 @@ export default function ApplicationsPage() {
         is_verified: false,
         created_at: new Date().toISOString(),
       })
-      if (insertError) {
-        alert('Application approved but company insert failed: ' + insertError.message)
-      }
+      if (insertError) alert('Application approved but company insert failed: ' + insertError.message)
     }
 
     setProcessing(false)
@@ -273,6 +282,13 @@ export default function ApplicationsPage() {
       social_verification: socials[app.id] || {}, reviewed_by: 'Admin',
     }).eq('id', app.id)
     if (error) { alert('Error: ' + error.message); setProcessing(false); return }
+
+    // also mark companies pending row as rejected (so portal shows rejected state)
+    await supabase.from('companies').update({
+      status: 'rejected',
+      rejection_reason: rejectReason,
+    }).ilike('owner_email', app.email)
+
     setRejectingId(null); setProcessing(false)
     const tpl = buildRejectionEmail(app, rejectReason, cl, clNotes[app.id] || {})
     setRejectReason('')
