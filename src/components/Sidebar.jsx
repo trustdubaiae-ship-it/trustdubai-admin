@@ -1,3 +1,5 @@
+// trustdubai-admin/src/components/Sidebar.jsx
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 export default function Sidebar({ page, setPage, session, adminData, canAccess, theme, setTheme }) {
@@ -6,44 +8,68 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
   const isAccounts   = adminData?.role === 'accounts' || isSuperAdmin
   const isDark       = theme === 'dark'
 
-  const MENU = [
+  // ---- Menu structure: flat items + collapsible groups ----
+  const STRUCTURE = [
     { section: 'MAIN' },
-    { id: 'dashboard',     icon: 'ti-layout-dashboard',  label: 'Dashboard',        show: true },
-    { id: 'companies',     icon: 'ti-building-store',    label: 'Businesses',       show: canAccess('view_companies') },
-    { id: 'users',         icon: 'ti-users',             label: 'Customers',        show: isSuperAdmin },
-    { id: 'reviews',       icon: 'ti-star',              label: 'Reviews',          show: canAccess('view_reviews') },
+    { id: 'dashboard',     icon: 'ti-layout-dashboard',  label: 'Dashboard',    show: true },
+    { id: 'inbox',         icon: 'ti-mail',              label: 'Inbox',        show: true },
+    { id: 'notifications', icon: 'ti-bell',              label: 'Notifications',show: true },
+    { id: 'companies',     icon: 'ti-building-store',    label: 'Businesses',   show: canAccess('view_companies') },
+    { id: 'users',         icon: 'ti-users',             label: 'Customers',    show: isSuperAdmin },
+    { id: 'reviews',       icon: 'ti-star',              label: 'Reviews',      show: canAccess('view_reviews') },
 
     { section: 'OPERATIONS' },
-    { id: 'applications',  icon: 'ti-file-description',  label: 'Applications',     show: true, badge: '3', badgeColor: '#f87171' },
-    { id: 'verification',  icon: 'ti-shield-check',      label: 'Verification',     show: true },
-    { id: 'team_verification', icon: 'ti-user-check',    label: 'Team Verify',      show: true },
-    { id: 'doc_verification',  icon: 'ti-file-certificate', label: 'Doc Verify',    show: true },
-    { id: 'leads',         icon: 'ti-address-book',      label: 'All Leads',        show: true },
-    { id: 'disputes',      icon: 'ti-alert-circle',      label: 'Disputes',         show: true, badge: '5', badgeColor: '#f87171' },
-    { id: 'reports',       icon: 'ti-flag',              label: 'Reports',          show: true },
-    { id: 'ai_moderation', icon: 'ti-robot',             label: 'AI Moderation',    show: isSuperAdmin, badge: '12', badgeColor: '#fbbf24' },
+    { group: 'verification', icon: 'ti-shield-check', label: 'Verification', show: true, children: [
+      { id: 'applications',      icon: 'ti-file-description',   label: 'Applications',    show: true, badge: '3', badgeColor: '#f87171' },
+      { id: 'verification',      icon: 'ti-shield-check',       label: 'Company Verify',  show: true },
+      { id: 'team_verification', icon: 'ti-user-check',         label: 'Team Verify',     show: true },
+      { id: 'doc_verification',  icon: 'ti-file-certificate',   label: 'Doc Verify',      show: true },
+    ]},
+    { id: 'leads',         icon: 'ti-address-book',      label: 'All Leads',    show: true },
+    { group: 'moderation', icon: 'ti-alert-circle', label: 'Moderation', show: true, children: [
+      { id: 'disputes',      icon: 'ti-alert-circle', label: 'Disputes',      show: true, badge: '5', badgeColor: '#f87171' },
+      { id: 'reports',       icon: 'ti-flag',         label: 'Reports',       show: true },
+      { id: 'ai_moderation', icon: 'ti-robot',        label: 'AI Moderation', show: isSuperAdmin, badge: '12', badgeColor: '#fbbf24' },
+    ]},
 
     { section: 'REVENUE' },
-    { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',   show: isSales || isAccounts || isSuperAdmin },
-    { id: 'sponsor_slots', icon: 'ti-ad-2',              label: 'Sponsor Slots',    show: isSuperAdmin },
+    { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
+    { id: 'sponsor_slots', icon: 'ti-ad-2',              label: 'Sponsor Slots',      show: isSuperAdmin },
     { id: 'accounts',      icon: 'ti-report-money',      label: 'Revenue & Accounts', show: isAccounts || isSuperAdmin },
 
-    { section: 'MANAGEMENT' },
-    { id: 'categories',    icon: 'ti-tag',               label: 'Categories',       show: canAccess('manage_categories') },
-    { id: 'plans',         icon: 'ti-award',             label: 'Badges & Plans',   show: canAccess('manage_plans') },
-    { id: 'plan_features', icon: 'ti-adjustments-check', label: 'Plan Features',    show: isSuperAdmin },
-    { id: 'badges_manager',icon: 'ti-medal',             label: 'Achievements',     show: isSuperAdmin },
-    { id: 'employees',     icon: 'ti-id-badge',          label: 'Employees',        show: canAccess('manage_employees') },
-    { id: 'notifications', icon: 'ti-bell',              label: 'Notifications',    show: true },
-    { id: 'bulk',          icon: 'ti-file-spreadsheet',  label: 'Bulk Upload',      show: canAccess('bulk_upload') },
+    { section: 'CONFIG' },
+    { group: 'controlpanel', icon: 'ti-adjustments', label: 'Control Panel', show: true, children: [
+      { id: 'categories',    icon: 'ti-tag',               label: 'Categories',    show: canAccess('manage_categories') },
+      { id: 'plans',         icon: 'ti-award',             label: 'Badges & Plans',show: canAccess('manage_plans') },
+      { id: 'plan_features', icon: 'ti-adjustments-check', label: 'Plan Features', show: isSuperAdmin },
+      { id: 'badges_manager',icon: 'ti-medal',             label: 'Achievements',  show: isSuperAdmin },
+      { id: 'employees',     icon: 'ti-id-badge',          label: 'Employees',     show: canAccess('manage_employees') },
+      { id: 'bulk',          icon: 'ti-file-spreadsheet',  label: 'Bulk Upload',   show: canAccess('bulk_upload') },
+      { id: 'settings',      icon: 'ti-settings',          label: 'Settings',      show: isSuperAdmin },
+    ]},
 
     { section: 'SYSTEM' },
-    { id: 'business_insights', icon: 'ti-chart-line',    label: 'Analytics',        show: isSuperAdmin },
-    { id: 'trust_score',   icon: 'ti-heart-rate-monitor',label: 'Trust Monitor',    show: isSuperAdmin },
-    { id: 'team',          icon: 'ti-crown',             label: 'Team',             show: isSuperAdmin },
-    { id: 'system_health', icon: 'ti-server',            label: 'System Health',    show: isSuperAdmin },
-    { id: 'settings',      icon: 'ti-settings',          label: 'Control Panel',    show: isSuperAdmin },
-  ].filter(m => m.section || m.show)
+    { id: 'business_insights', icon: 'ti-chart-line',     label: 'Analytics',      show: isSuperAdmin },
+    { id: 'trust_score',   icon: 'ti-heart-rate-monitor', label: 'Trust Monitor',  show: isSuperAdmin },
+    { id: 'team',          icon: 'ti-crown',              label: 'Team',           show: isSuperAdmin },
+    { id: 'system_health', icon: 'ti-server',             label: 'System Health',  show: isSuperAdmin },
+  ]
+
+  // which group contains the active page (for auto-open)
+  function groupOfPage(pid) {
+    for (const item of STRUCTURE) {
+      if (item.group && item.children?.some(c => c.id === pid)) return item.group
+    }
+    return null
+  }
+
+  const [openGroup, setOpenGroup] = useState(() => groupOfPage(page))
+
+  // when active page changes (e.g. via dashboard shortcut), auto-open its group
+  useEffect(() => {
+    const g = groupOfPage(page)
+    if (g) setOpenGroup(g)
+  }, [page])
 
   const SB = {
     bg:                   isDark ? '#0d1117'                  : '#ffffff',
@@ -64,6 +90,54 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     footerBg:             isDark ? 'rgba(255,255,255,0.02)'   : '#f8fafc',
     footerText:           isDark ? '#f0fdf4'                  : '#0f172a',
     footerSub:            isDark ? '#1d9e75'                  : '#16a34a',
+  }
+
+  function renderItem(item, i, nested = false) {
+    const activeStyle = page === item.id
+    return (
+      <div key={`${item.id}-${i}`} onClick={() => setPage(item.id)}
+        style={{ display:'flex', alignItems:'center', gap:8, padding: nested ? '6px 16px 6px 34px' : '7px 16px',
+          cursor:'pointer', background:activeStyle?SB.activeBg:'transparent',
+          borderRight:activeStyle?`2px solid ${SB.activeColor}`:'2px solid transparent', transition:'all 0.15s' }}
+        onMouseEnter={e=>{ if(page!==item.id) e.currentTarget.style.background=SB.hoverBg }}
+        onMouseLeave={e=>{ if(page!==item.id) e.currentTarget.style.background='transparent' }}
+      >
+        <i className={`ti ${item.icon}`} style={{ fontSize:13, color:page===item.id?SB.activeColor:SB.muted, flexShrink:0 }}/>
+        <span style={{ fontSize:11, fontWeight:page===item.id?600:400, color:page===item.id?SB.activeColor:SB.itemColor, flex:1 }}>{item.label}</span>
+        {item.badge && (
+          <span style={{ background:item.badgeColor+'25', color:item.badgeColor, fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:99 }}>{item.badge}</span>
+        )}
+      </div>
+    )
+  }
+
+  function renderGroup(item, i) {
+    const children = item.children.filter(c => c.show)
+    if (children.length === 0) return null
+    const isOpen = openGroup === item.group
+    const containsActive = children.some(c => c.id === page)
+    // total badge count on collapsed parent
+    const badgeSum = children.reduce((n,c) => n + (c.badge ? parseInt(c.badge,10) || 0 : 0), 0)
+
+    return (
+      <div key={`grp-${i}`}>
+        <div onClick={() => setOpenGroup(isOpen ? null : item.group)}
+          style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 16px', cursor:'pointer',
+            background: containsActive && !isOpen ? SB.activeBg : 'transparent',
+            borderRight: containsActive && !isOpen ? `2px solid ${SB.activeColor}` : '2px solid transparent', transition:'all 0.15s' }}
+          onMouseEnter={e=>{ if(!(containsActive && !isOpen)) e.currentTarget.style.background=SB.hoverBg }}
+          onMouseLeave={e=>{ if(!(containsActive && !isOpen)) e.currentTarget.style.background='transparent' }}
+        >
+          <i className={`ti ${item.icon}`} style={{ fontSize:13, color: containsActive ? SB.activeColor : SB.muted, flexShrink:0 }}/>
+          <span style={{ fontSize:11, fontWeight: containsActive ? 600 : 400, color: containsActive ? SB.activeColor : SB.itemColor, flex:1 }}>{item.label}</span>
+          {badgeSum > 0 && !isOpen && (
+            <span style={{ background:'#f8717125', color:'#f87171', fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:99 }}>{badgeSum}</span>
+          )}
+          <i className={`ti ${isOpen ? 'ti-chevron-down' : 'ti-chevron-right'}`} style={{ fontSize:12, color:SB.muted, flexShrink:0 }}/>
+        </div>
+        {isOpen && children.map((c, ci) => renderItem(c, `${i}-${ci}`, true))}
+      </div>
+    )
   }
 
   return (
@@ -96,26 +170,15 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
       </div>
 
       <nav style={{ flex:1, padding:'6px 0', overflowY:'auto' }}>
-        {MENU.map((item, i) => {
+        {STRUCTURE.map((item, i) => {
           if (item.section) return (
             <div key={`section-${i}`} style={{ fontSize:7.5, fontWeight:700, color:SB.section, letterSpacing:'0.08em', padding:'10px 16px 3px', textTransform:'uppercase' }}>
               {item.section}
             </div>
           )
-          const activeStyle = page === item.id
-          return (
-            <div key={`${item.id}-${i}`} onClick={() => setPage(item.id)}
-              style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 16px', cursor:'pointer', background:activeStyle?SB.activeBg:'transparent', borderRight:activeStyle?`2px solid ${SB.activeColor}`:'2px solid transparent', transition:'all 0.15s' }}
-              onMouseEnter={e=>{ if(page!==item.id) e.currentTarget.style.background=SB.hoverBg }}
-              onMouseLeave={e=>{ if(page!==item.id) e.currentTarget.style.background='transparent' }}
-            >
-              <i className={`ti ${item.icon}`} style={{ fontSize:13, color:page===item.id?SB.activeColor:SB.muted, flexShrink:0 }}/>
-              <span style={{ fontSize:11, fontWeight:page===item.id?600:400, color:page===item.id?SB.activeColor:SB.itemColor, flex:1 }}>{item.label}</span>
-              {item.badge && (
-                <span style={{ background:item.badgeColor+'25', color:item.badgeColor, fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:99 }}>{item.badge}</span>
-              )}
-            </div>
-          )
+          if (item.group) return renderGroup(item, i)
+          if (item.show) return renderItem(item, i)
+          return null
         })}
       </nav>
 
