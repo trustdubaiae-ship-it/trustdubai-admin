@@ -25,6 +25,7 @@ import TrustScoreMonitor from './pages/TrustScoreMonitor'
 import BusinessInsights from './pages/BusinessInsights'
 import SystemHealth from './pages/SystemHealth'
 import Notifications from './pages/Notifications'
+import AdminInbox from './pages/AdminInbox'
 import SponsorSlotsPage from './pages/SponsorSlotsPage'
 import SuperAdminSettings from './pages/SuperAdminSettings'
 import BadgeManager from './pages/BadgeManager'
@@ -122,6 +123,7 @@ export default function App() {
       <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} theme={theme} setTheme={setTheme} />
       <div style={{ flex:1, marginLeft:210, padding:20, background: isDark?'#0d1117':'#f0f4f8', minHeight:'100vh', overflowX:'hidden' }}>
         {page === 'dashboard'         && <Dashboard setPage={setPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
+        {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
         {page === 'leads'             && <Leads />}
