@@ -15,8 +15,8 @@ const CHECKLIST = {
   ],
   owner_eid: [
     { key: 'name_match', label: 'Owner name matches' },
-    { key: 'number',     label: 'EID number readable' },
-    { key: 'not_expired',label: 'Not expired' },
+    { key: 'number',     label: 'EID number matches photo' },
+    { key: 'not_expired',label: 'Expiry matches photo (not expired)' },
     { key: 'clear',      label: 'Document clear & readable' },
   ],
 }
@@ -26,9 +26,8 @@ export default function VerificationQueue({ theme, adminData }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
-  const [confirmFor, setConfirmFor] = useState(null) // company being submitted
+  const [confirmFor, setConfirmFor] = useState(null)
 
-  // per-company local checklist state: { [companyId]: { trade_license:{...}, owner_eid:{...} } }
   const [checks, setChecks] = useState({})
 
   const C = {
@@ -46,12 +45,11 @@ export default function VerificationQueue({ theme, adminData }) {
     setLoading(true)
     const { data, error } = await supabase
       .from('companies')
-      .select('id, name, owner_email, trade_license_number, trade_license_url, trade_license_status, owner_eid_url, owner_eid_status, phone, phone_verified, verification_percent, verification_status, verification_checklist, verified_by_name')
-      .or('trade_license_url.not.is.null,owner_eid_url.not.is.null')
+      .select('id, name, owner_email, trade_license_number, trade_license_url, trade_license_status, owner_eid_url, owner_eid_status, owner_eid_number, owner_eid_expiry, owner_eid_front_url, owner_eid_back_url, phone, phone_verified, verification_percent, verification_status, verification_checklist, verified_by_name')
+      .or('trade_license_url.not.is.null,owner_eid_url.not.is.null,owner_eid_front_url.not.is.null')
       .order('verification_status', { ascending: true })
     if (!error && data) {
       setRows(data)
-      // seed local checks from saved checklist
       const seed = {}
       data.forEach(c => { seed[c.id] = c.verification_checklist || {} })
       setChecks(seed)
@@ -78,7 +76,6 @@ export default function VerificationQueue({ theme, adminData }) {
     }))
   }
 
-  // Returns 'approved' | 'rejected' | 'incomplete' for a doc
   function docVerdict(companyId, docKind, hasDoc) {
     if (!hasDoc) return 'none'
     const items = CHECKLIST[docKind]
@@ -89,10 +86,12 @@ export default function VerificationQueue({ theme, adminData }) {
     return anyFail ? 'rejected' : 'approved'
   }
 
+  // owner EID is "uploaded" if any photo exists (new front or old single url)
+  function eidHasDoc(c) { return !!(c.owner_eid_front_url || c.owner_eid_url) }
+
   function openConfirm(company) {
-    // validate: every uploaded doc fully checked
     const tlVerdict  = docVerdict(company.id, 'trade_license', !!company.trade_license_url)
-    const eidVerdict = docVerdict(company.id, 'owner_eid', !!company.owner_eid_url)
+    const eidVerdict = docVerdict(company.id, 'owner_eid', eidHasDoc(company))
     if (tlVerdict === 'incomplete' || eidVerdict === 'incomplete') {
       alert('Please complete the checklist for all uploaded documents before submitting.')
       return
@@ -109,9 +108,8 @@ export default function VerificationQueue({ theme, adminData }) {
       verified_by_name: adminData?.full_name || 'Admin',
     }
     if (company.trade_license_url) patch.trade_license_status = (tlVerdict === 'approved') ? 'approved' : 'rejected'
-    if (company.owner_eid_url)     patch.owner_eid_status     = (eidVerdict === 'approved') ? 'approved' : 'rejected'
+    if (eidHasDoc(company))        patch.owner_eid_status     = (eidVerdict === 'approved') ? 'approved' : 'rejected'
 
-    // build rejection reason from failed items
     const fails = []
     ;['trade_license', 'owner_eid'].forEach(dk => {
       const state = (checks[company.id] || {})[dk] || {}
@@ -127,7 +125,6 @@ export default function VerificationQueue({ theme, adminData }) {
         reason: fails.length ? patch.rejection_reason : null,
         performed_by: adminData?.id || null,
       })
-      // Email (Step C) — will hook here later
       setConfirmFor(null)
       await load()
       alert(fails.length ? 'Submitted — company notified of items needing correction.' : 'Submitted — company verified and notified.')
@@ -177,13 +174,20 @@ export default function VerificationQueue({ theme, adminData }) {
             <DocChecklist
               C={C} companyId={c.id} docKind="trade_license"
               title="Trade License" number={c.trade_license_number}
-              url={c.trade_license_url} state={(checks[c.id] || {}).trade_license || {}}
+              urls={[{ label: 'View document', path: c.trade_license_url }]}
+              state={(checks[c.id] || {}).trade_license || {}}
               onView={viewDoc} onToggle={toggleCheck}
             />
 
             <DocChecklist
               C={C} companyId={c.id} docKind="owner_eid"
-              title="Owner Emirates ID" url={c.owner_eid_url}
+              title="Owner Emirates ID"
+              number={c.owner_eid_number}
+              expiry={c.owner_eid_expiry}
+              urls={[
+                { label: 'View front', path: c.owner_eid_front_url || c.owner_eid_url },
+                { label: 'View back', path: c.owner_eid_back_url },
+              ]}
               state={(checks[c.id] || {}).owner_eid || {}}
               onView={viewDoc} onToggle={toggleCheck}
             />
@@ -251,21 +255,40 @@ export default function VerificationQueue({ theme, adminData }) {
   )
 }
 
-function DocChecklist({ C, companyId, docKind, title, number, url, state, onView, onToggle }) {
+function DocChecklist({ C, companyId, docKind, title, number, expiry, urls, state, onView, onToggle }) {
   const items = CHECKLIST[docKind]
+  const validUrls = (urls || []).filter(u => u.path)
+  const hasDoc = validUrls.length > 0
+
+  // expiry note
+  let expiryNote = null
+  if (expiry) {
+    const today = new Date(); today.setHours(0,0,0,0)
+    const exp = new Date(expiry)
+    const days = Math.round((exp - today) / 86400000)
+    if (days < 0) expiryNote = { text: `${expiry} · EXPIRED`, color: '#c0392b' }
+    else if (days <= 30) expiryNote = { text: `${expiry} · expires in ${days}d`, color: '#d97706' }
+    else expiryNote = { text: expiry, color: C.muted }
+  }
+
   return (
     <div style={{ padding: '12px 0', borderTop: `1px solid ${C.rowBorder}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         <div>
           <span style={{ fontWeight: 600, color: C.label }}>{title}</span>
           {number && <span style={{ marginLeft: 10, fontSize: 13, color: C.muted }}>#{number}</span>}
+          {expiryNote && <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: expiryNote.color }}>Exp: {expiryNote.text}</span>}
         </div>
-        {url
-          ? <button onClick={() => onView(url)} style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.label, padding: '6px 12px', borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>View document</button>
-          : <span style={{ fontSize: 13, color: C.muted }}>Not uploaded</span>}
+        {hasDoc ? (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {validUrls.map((u, i) => (
+              <button key={i} onClick={() => onView(u.path)} style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.label, padding: '6px 12px', borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>{u.label}</button>
+            ))}
+          </div>
+        ) : <span style={{ fontSize: 13, color: C.muted }}>Not uploaded</span>}
       </div>
 
-      {url && items.map(it => {
+      {hasDoc && items.map(it => {
         const val = state[it.key]
         return (
           <div key={it.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
