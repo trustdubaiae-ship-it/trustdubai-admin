@@ -25,12 +25,15 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
       { id: 'team_verification', icon: 'ti-user-check',         label: 'Team Verify',     show: true },
       { id: 'doc_verification',  icon: 'ti-file-certificate',   label: 'Doc Verify',      show: true },
     ]},
-    { id: 'leads',         icon: 'ti-address-book',      label: 'All Leads',    show: true },
     { group: 'moderation', icon: 'ti-alert-circle', label: 'Moderation', show: true, children: [
       { id: 'disputes',      icon: 'ti-alert-circle', label: 'Disputes',      show: true, badge: '5', badgeColor: '#f87171' },
       { id: 'reports',       icon: 'ti-flag',         label: 'Reports',       show: true },
       { id: 'ai_moderation', icon: 'ti-robot',        label: 'AI Moderation', show: isSuperAdmin, badge: '12', badgeColor: '#fbbf24' },
     ]},
+
+    { section: 'LEAD ENGINE' },
+    { id: 'leads',         icon: 'ti-address-book',      label: 'All Leads',    show: true },
+    { id: 'lead_forms',    icon: 'ti-forms',             label: 'Lead Forms',   show: isSuperAdmin },
 
     { section: 'REVENUE' },
     { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
