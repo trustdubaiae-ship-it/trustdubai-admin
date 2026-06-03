@@ -32,6 +32,7 @@ export default function Leads() {
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [quickFilter, setQuickFilter]   = useState('all')   // all / distributed / new / active / won
   const [companyFilter, setCompanyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [companies, setCompanies]       = useState([])
@@ -93,7 +94,17 @@ export default function Leads() {
 
   const periodLeads = filterByPeriod(leads)
 
+  function matchesQuick(l) {
+    const st = l.status || 'new'
+    if (quickFilter === 'distributed') return !!l.distributed
+    if (quickFilter === 'new')         return st === 'new'
+    if (quickFilter === 'active')      return !['won','lost'].includes(st)
+    if (quickFilter === 'won')         return st === 'won'
+    return true
+  }
+
   const filtered = periodLeads
+    .filter(matchesQuick)
     .filter(l => statusFilter === 'all' ? true : (l.status || 'new') === statusFilter)
     .filter(l => companyFilter === 'all' ? true : l.company_id === companyFilter)
     .filter(l => sourceFilter === 'all' ? true : sourceBucket(l.source) === sourceFilter)
@@ -115,9 +126,8 @@ export default function Leads() {
 
   const srcCount = (key) => periodLeads.filter(l => sourceBucket(l.source) === key).length
 
-  function toggleSource(key) {
-    setSourceFilter(prev => prev === key ? 'all' : key)
-  }
+  function toggleSource(key) { setSourceFilter(prev => prev === key ? 'all' : key) }
+  function toggleQuick(key)  { setQuickFilter(prev => prev === key ? 'all' : key) }
 
   const text      = isDark ? '#f1f5f9' : '#0f172a'
   const textSub   = isDark ? '#94a3b8' : '#64748b'
@@ -125,6 +135,14 @@ export default function Leads() {
   const cardBg    = isDark ? '#1e293b' : '#ffffff'
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'
   const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
+
+  const STAT_CARDS = [
+    { key: 'all',         label: 'Total',       value: totalLeads,    color: '#03C1F5', clickable: false },
+    { key: 'distributed', label: 'Distributed', value: distributed,   color: '#7c3aed', clickable: true },
+    { key: 'new',         label: 'New',         value: newLeads,      color: '#8b5cf6', clickable: true },
+    { key: 'active',      label: 'Active',      value: activeLeads,   color: '#f59e0b', clickable: true },
+    { key: 'won',         label: 'Won Rate',    value: wonRate + '%', color: '#10b981', clickable: true },
+  ]
 
   return (
     <div style={{ maxWidth: 1180 }}>
@@ -152,23 +170,28 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Overview stats (row 1) */}
+      {/* Overview stats (row 1) — clickable except Total */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 10 }}>
-        {[
-          { label: 'Total',       value: totalLeads,    color: '#03C1F5' },
-          { label: 'Distributed', value: distributed,   color: '#7c3aed' },
-          { label: 'New',         value: newLeads,      color: '#8b5cf6' },
-          { label: 'Active',      value: activeLeads,   color: '#f59e0b' },
-          { label: 'Won Rate',    value: wonRate + '%', color: '#10b981' },
-        ].map(s => (
-          <div key={s.label} style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 11, padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1.2 }}>{s.value}</div>
-          </div>
-        ))}
+        {STAT_CARDS.map(s => {
+          const active = s.clickable && quickFilter === s.key
+          return (
+            <div key={s.key}
+              onClick={() => s.clickable && toggleQuick(s.key)}
+              style={{ background: active ? (isDark ? s.color + '22' : s.color + '14') : cardBg,
+                border: '1.5px solid ' + (active ? s.color : borderCol), borderRadius: 11, padding: '12px 14px',
+                cursor: s.clickable ? 'pointer' : 'default', transition: 'all 0.15s', position: 'relative' }}
+              onMouseEnter={e => { if (s.clickable && !active) e.currentTarget.style.borderColor = s.color }}
+              onMouseLeave={e => { if (s.clickable && !active) e.currentTarget.style.borderColor = borderCol }}
+            >
+              <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1.2 }}>{s.value}</div>
+              {active && <i className="ti ti-circle-check-filled" style={{ position: 'absolute', top: 10, right: 10, fontSize: 14, color: s.color }} />}
+            </div>
+          )
+        })}
       </div>
 
-      {/* Source stats (row 2) — CLICKABLE FILTER */}
+      {/* Source stats (row 2) — clickable filter */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         {SOURCES.map(s => {
           const active = sourceFilter === s.key
@@ -193,14 +216,15 @@ export default function Leads() {
         })}
       </div>
 
-      {/* active source hint */}
-      {sourceFilter !== 'all' && (
-        <div style={{ marginBottom: 14, fontSize: 12, color: textSub, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Showing <strong style={{ color: sourceConfig(sourceFilter).color }}>{sourceConfig(sourceFilter).label}</strong> leads only</span>
-          <button onClick={() => setSourceFilter('all')} style={{ fontSize: 11, color: '#03C1F5', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+      {/* active filter hint */}
+      {(sourceFilter !== 'all' || quickFilter !== 'all') ? (
+        <div style={{ marginBottom: 14, fontSize: 12, color: textSub, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span>Filtered:</span>
+          {quickFilter !== 'all' && <strong style={{ color: STAT_CARDS.find(s=>s.key===quickFilter)?.color }}>{STAT_CARDS.find(s=>s.key===quickFilter)?.label}</strong>}
+          {sourceFilter !== 'all' && <strong style={{ color: sourceConfig(sourceFilter).color }}>{sourceConfig(sourceFilter).label}</strong>}
+          <button onClick={() => { setSourceFilter('all'); setQuickFilter('all') }} style={{ fontSize: 11, color: '#03C1F5', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
         </div>
-      )}
-      {sourceFilter === 'all' && <div style={{ marginBottom: 14 }} />}
+      ) : <div style={{ marginBottom: 14 }} />}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
