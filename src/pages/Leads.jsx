@@ -10,6 +10,9 @@ const LEAD_STATUSES = [
   { value: 'lost',            label: 'Lost',            color: '#ef4444', bg: '#fef2f2' },
 ]
 
+// distribution status -> page status (what company set on a platform lead)
+const DIST_TO_PAGE = { assigned:'new', viewed:'qualified', contacted:'in_conversation', quoted:'proposal_given', won:'won', lost:'lost', transferred:'lost' }
+
 const SOURCES = [
   { key: 'platform', label: 'Platform',       color: '#0077aa', bg: '#e0f9ff', icon: 'ti-world' },
   { key: 'meta',     label: 'Meta',           color: '#1877f2', bg: '#eff6ff', icon: 'ti-brand-meta' },
@@ -32,7 +35,7 @@ export default function Leads() {
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [quickFilter, setQuickFilter]   = useState('all')   // all / distributed / new / active / won
+  const [quickFilter, setQuickFilter]   = useState('all')
   const [companyFilter, setCompanyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [companies, setCompanies]       = useState([])
@@ -57,14 +60,15 @@ export default function Leads() {
       .order('created_at', { ascending: false })
     setLeads(leadsData || [])
 
+    // distribution: include status + follow-up so admin sees what each company did
     const { data: distData } = await supabase
       .from('lead_distributions')
-      .select('lead_id, rank, companies(name)')
+      .select('lead_id, rank, status, follow_up_date, companies(name)')
       .order('rank', { ascending: true })
     const map = {}
     for (const d of distData || []) {
       if (!map[d.lead_id]) map[d.lead_id] = []
-      map[d.lead_id].push({ name: d.companies?.name || '—', rank: d.rank })
+      map[d.lead_id].push({ name: d.companies?.name || '—', rank: d.rank, status: d.status || 'assigned', follow_up_date: d.follow_up_date })
     }
     setDists(map)
 
@@ -92,10 +96,30 @@ export default function Leads() {
     return data
   }
 
+  // for a platform lead, the "effective" status is the best (most advanced) distribution status
+  const STAGE_ORDER = ['new','qualified','in_conversation','proposal_given','won','lost']
+  function effectiveStatus(lead) {
+    const isPlatform = sourceBucket(lead.source) === 'platform'
+    const leadDists = dists[lead.id] || []
+    if (isPlatform && leadDists.length > 0) {
+      // pick most advanced stage among companies (won beats proposal beats ... )
+      let best = 'new', bestIdx = -1
+      for (const d of leadDists) {
+        const pageSt = DIST_TO_PAGE[d.status] || 'new'
+        const idx = STAGE_ORDER.indexOf(pageSt)
+        if (idx > bestIdx && pageSt !== 'lost') { bestIdx = idx; best = pageSt }
+      }
+      // if all lost, show lost
+      if (bestIdx === -1) return 'lost'
+      return best
+    }
+    return lead.status || 'new'
+  }
+
   const periodLeads = filterByPeriod(leads)
 
   function matchesQuick(l) {
-    const st = l.status || 'new'
+    const st = effectiveStatus(l)
     if (quickFilter === 'distributed') return !!l.distributed
     if (quickFilter === 'new')         return st === 'new'
     if (quickFilter === 'active')      return !['won','lost'].includes(st)
@@ -105,7 +129,7 @@ export default function Leads() {
 
   const filtered = periodLeads
     .filter(matchesQuick)
-    .filter(l => statusFilter === 'all' ? true : (l.status || 'new') === statusFilter)
+    .filter(l => statusFilter === 'all' ? true : effectiveStatus(l) === statusFilter)
     .filter(l => companyFilter === 'all' ? true : l.company_id === companyFilter)
     .filter(l => sourceFilter === 'all' ? true : sourceBucket(l.source) === sourceFilter)
     .filter(l => {
@@ -118,9 +142,9 @@ export default function Leads() {
   const sourceConfig = (key) => SOURCES.find(s => s.key === key) || SOURCES[0]
 
   const totalLeads   = periodLeads.length
-  const wonLeads     = periodLeads.filter(l => l.status === 'won').length
-  const newLeads     = periodLeads.filter(l => !l.status || l.status === 'new').length
-  const activeLeads  = periodLeads.filter(l => !['won','lost'].includes(l.status || 'new')).length
+  const wonLeads     = periodLeads.filter(l => effectiveStatus(l) === 'won').length
+  const newLeads     = periodLeads.filter(l => effectiveStatus(l) === 'new').length
+  const activeLeads  = periodLeads.filter(l => !['won','lost'].includes(effectiveStatus(l))).length
   const distributed  = periodLeads.filter(l => l.distributed).length
   const wonRate      = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0
 
@@ -170,7 +194,7 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Overview stats (row 1) — clickable except Total */}
+      {/* Overview stats (row 1) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 10 }}>
         {STAT_CARDS.map(s => {
           const active = s.clickable && quickFilter === s.key
@@ -191,7 +215,7 @@ export default function Leads() {
         })}
       </div>
 
-      {/* Source stats (row 2) — clickable filter */}
+      {/* Source stats (row 2) */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         {SOURCES.map(s => {
           const active = sourceFilter === s.key
@@ -268,11 +292,12 @@ export default function Leads() {
             </thead>
             <tbody>
               {filtered.map(lead => {
-                const sc  = statusConfig(lead.status || 'new')
+                const isPlatform = sourceBucket(lead.source) === 'platform'
+                const effSt = effectiveStatus(lead)
+                const sc  = statusConfig(effSt)
                 const src = sourceConfig(sourceBucket(lead.source))
                 const isExpanded = expandedId === lead.id
                 const leadDists = dists[lead.id] || []
-                const isPlatform = sourceBucket(lead.source) === 'platform'
                 return (
                   <>
                     <tr key={lead.id} style={{ borderBottom: '1px solid ' + borderCol }}
@@ -340,10 +365,18 @@ export default function Leads() {
                       </td>
 
                       <td style={{ padding: '11px 14px' }}>
-                        <select value={lead.status || 'new'} onChange={e => changeStatus(lead.id, e.target.value)}
-                          style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
-                          {LEAD_STATUSES.map(s => <option key={s.value} value={s.value} style={{ background: cardBg, color: text }}>{s.label}</option>)}
-                        </select>
+                        {isPlatform ? (
+                          // platform lead: read-only — shows what the company set
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600 }}>
+                            {sc.label}
+                            {leadDists.length > 1 && <span style={{ fontSize: 9, opacity: 0.7 }}>(best)</span>}
+                          </span>
+                        ) : (
+                          <select value={lead.status || 'new'} onChange={e => changeStatus(lead.id, e.target.value)}
+                            style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
+                            {LEAD_STATUSES.map(s => <option key={s.value} value={s.value} style={{ background: cardBg, color: text }}>{s.label}</option>)}
+                          </select>
+                        )}
                       </td>
 
                       <td style={{ padding: '11px 14px', fontSize: 11.5, color: textMuted, whiteSpace: 'nowrap' }}>
@@ -371,13 +404,19 @@ export default function Leads() {
                           </div>
                           {leadDists.length > 0 && (
                             <div>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 6 }}>Distributed to:</div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 6 }}>Distributed to (with each company's progress):</div>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {leadDists.map((d, i) => (
-                                  <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, background: cardBg, border: '1px solid ' + borderCol, color: text }}>
-                                    #{d.rank} {d.name}
-                                  </span>
-                                ))}
+                                {leadDists.map((d, i) => {
+                                  const dPage = DIST_TO_PAGE[d.status] || 'new'
+                                  const dsc = statusConfig(dPage)
+                                  return (
+                                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 8, background: cardBg, border: '1px solid ' + borderCol, color: text }}>
+                                      <strong>#{d.rank} {d.name}</strong>
+                                      <span style={{ padding: '1px 7px', borderRadius: 99, background: isDark ? dsc.color + '22' : dsc.bg, color: dsc.color, fontSize: 10, fontWeight: 600 }}>{dsc.label}</span>
+                                      {d.follow_up_date && <span style={{ fontSize: 9.5, color: textMuted }}>F/U {new Date(d.follow_up_date).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}</span>}
+                                    </span>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}
