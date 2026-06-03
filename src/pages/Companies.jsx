@@ -27,6 +27,13 @@ function formatExpiry(dateStr) {
   return { label: diffDays + 'd left', color: '#10b981', days: diffDays }
 }
 
+function perfBadge(score) {
+  const s = Number(score) || 0
+  if (s >= 3)  return { color: '#0f6e56', bg: '#e1f5ee', icon: 'ti-trending-up' }
+  if (s >= 1)  return { color: '#854f0b', bg: '#faeeda', icon: 'ti-arrow-up-right' }
+  return { color: '#888780', bg: '#f1efe8', icon: 'ti-minus' }
+}
+
 function Modal({ title, onClose, children, wide }) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   return (
@@ -176,6 +183,16 @@ export default function Companies({ initialPlanFilter }) {
     c.area?.toLowerCase().includes(search.toLowerCase())
   )
 
+  // top performer (highest performance_score among displayed, must be > 0)
+  const topPerformerId = (() => {
+    let best = null, bestScore = 0
+    for (const c of displayList) {
+      const s = Number(c.performance_score) || 0
+      if (s > bestScore) { bestScore = s; best = c.id }
+    }
+    return best
+  })()
+
   const text      = isDark ? '#f1f5f9' : '#0f172a'
   const textSub   = isDark ? '#94a3b8' : '#64748b'
   const textMuted = isDark ? '#475569' : '#94a3b8'
@@ -197,12 +214,27 @@ export default function Companies({ initialPlanFilter }) {
     platinum: baseList.filter(c => (c.plan || 'free') === 'platinum').length,
   }
 
+  // quick stats (based on current tab list)
+  const payingCount   = baseList.filter(c => (c.plan || 'free') !== 'free').length
+  const perfList      = baseList.map(c => Number(c.performance_score) || 0)
+  const avgPerf       = perfList.length ? (perfList.reduce((a, b) => a + b, 0) / perfList.length) : 0
+  const expiringCount = baseList.filter(c => {
+    const e = formatExpiry(c.plan_expires_at)
+    return e && e.days >= 0 && e.days <= 7
+  }).length
+
   const PLAN_CARDS = [
     { key: 'all',      label: 'All',      color: '#03C1F5', bg: isDark ? 'rgba(3,193,245,0.12)'   : '#e0f9ff' },
     { key: 'free',     label: 'Free',     color: '#6b7280', bg: isDark ? 'rgba(107,114,128,0.12)' : '#f3f4f6' },
     { key: 'silver',   label: 'Silver',   color: '#94a3b8', bg: isDark ? 'rgba(148,163,184,0.12)' : '#f1f5f9' },
     { key: 'gold',     label: 'Gold',     color: '#e8b84b', bg: isDark ? 'rgba(232,184,75,0.12)'  : '#fffdf7' },
     { key: 'platinum', label: 'Platinum', color: '#8b5cf6', bg: isDark ? 'rgba(139,92,246,0.12)'  : '#f5f3ff' },
+  ]
+
+  const QUICK_STATS = [
+    { label: 'Paying',    value: payingCount,            icon: 'ti-cash',        color: '#10b981' },
+    { label: 'Avg perf.', value: avgPerf.toFixed(1),     icon: 'ti-trending-up', color: '#10b981' },
+    { label: 'Expiring',  value: expiringCount,          icon: 'ti-clock',       color: '#f59e0b' },
   ]
 
   return (
@@ -231,7 +263,7 @@ export default function Companies({ initialPlanFilter }) {
       </div>
 
       {/* Plan Filter Cards — 5 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 12 }}>
         {PLAN_CARDS.map(p => (
           <div key={p.key}
             onClick={() => setPlanFilter(p.key)}
@@ -251,6 +283,16 @@ export default function Companies({ initialPlanFilter }) {
             <div style={{ fontSize: 12, fontWeight: 600, color: planFilter === p.key ? p.color : textSub, marginTop: 5 }}>
               {p.label}
             </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick stats row */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        {QUICK_STATS.map(s => (
+          <div key={s.label} style={{ flex: 1, minWidth: 120, background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: '1px solid ' + borderCol, borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <i className={'ti ' + s.icon} style={{ fontSize: 16, color: s.color }} />
+            <div><span style={{ fontSize: 15, fontWeight: 700, color: text }}>{s.value}</span> <span style={{ fontSize: 11, color: textSub }}>{s.label}</span></div>
           </div>
         ))}
       </div>
@@ -296,7 +338,7 @@ export default function Companies({ initialPlanFilter }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: bgRow }}>
-                    {['Company', 'Category', 'Area', 'Plan', 'Expiry', 'Status', 'Actions'].map(h => (
+                    {['Company', 'Category', 'Plan', 'Performance', 'Expiry', 'Status', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol }}>{h}</th>
                     ))}
                   </tr>
@@ -305,6 +347,9 @@ export default function Companies({ initialPlanFilter }) {
                   {displayList.map(c => {
                     const plan   = PLANS[c.plan || 'free'] || PLANS.free
                     const expiry = formatExpiry(c.plan_expires_at)
+                    const score  = Number(c.performance_score) || 0
+                    const pb     = perfBadge(score)
+                    const isTop  = c.id === topPerformerId
                     return (
                       <tr key={c.id} style={{ borderBottom: '1px solid ' + borderCol, cursor: 'pointer' }}
                         onMouseEnter={e => e.currentTarget.style.background = bgRow}
@@ -316,15 +361,22 @@ export default function Companies({ initialPlanFilter }) {
                               {initials(c.name)}
                             </div>
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: text }}>{c.name}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: text, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                {c.name}
+                                {isTop && <span style={{ fontSize: 10, color: '#0f6e56', background: isDark ? 'rgba(29,158,117,0.2)' : '#e1f5ee', padding: '1px 6px', borderRadius: 99 }}>Top</span>}
+                              </div>
                               <div style={{ fontSize: 11, color: textMuted }}>{c.owner_email}</div>
                             </div>
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: textSub }} onClick={() => setDetailC(c)}>{c.category}</td>
-                        <td style={{ padding: '12px 16px', fontSize: 13, color: textSub }} onClick={() => setDetailC(c)}>{c.area || '—'}</td>
                         <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
                           <span style={{ background: plan.bg, color: plan.color, fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>{plan.label}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: isDark ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 13, fontWeight: 600, padding: '4px 11px', borderRadius: 99 }}>
+                            <i className={'ti ' + pb.icon} style={{ fontSize: 14 }} /> {score.toFixed(1)}
+                          </span>
                         </td>
                         <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
                           {!c.plan_expires_at ? <span style={{ fontSize: 12, color: textMuted }}>—</span> : expiry ? <span style={{ fontSize: 12, fontWeight: 500, color: expiry.color }}>{expiry.days < 0 ? '⚠️ ' : ''}{expiry.label}</span> : null}
@@ -357,6 +409,8 @@ export default function Companies({ initialPlanFilter }) {
               {displayList.map(c => {
                 const plan   = PLANS[c.plan || 'free'] || PLANS.free
                 const expiry = formatExpiry(c.plan_expires_at)
+                const score  = Number(c.performance_score) || 0
+                const pb     = perfBadge(score)
                 return (
                   <div key={c.id} onClick={() => setDetailC(c)}
                     style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 14, padding: 18, cursor: 'pointer', transition: 'all 0.15s' }}
@@ -375,6 +429,9 @@ export default function Companies({ initialPlanFilter }) {
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, flexShrink: 0 }}>{plan.label}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8 }}>
+                        <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)}
+                      </span>
                       <span style={{ background: c.status === 'approved' ? (isDark ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDark ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: c.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>{c.status}</span>
                       {c.is_verified && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>✓ Verified</span>}
                       {expiry && c.plan !== 'free' && <span style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', color: expiry.color, fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>{expiry.label}</span>}
@@ -402,6 +459,8 @@ export default function Companies({ initialPlanFilter }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
               {displayList.map(c => {
                 const plan = PLANS[c.plan || 'free'] || PLANS.free
+                const score = Number(c.performance_score) || 0
+                const pb = perfBadge(score)
                 return (
                   <div key={c.id} onClick={() => setDetailC(c)}
                     style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, padding: 16, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}
@@ -413,7 +472,12 @@ export default function Companies({ initialPlanFilter }) {
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
                     <div style={{ fontSize: 10, color: textSub, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.category}</div>
-                    <span style={{ display: 'inline-block', marginTop: 6, background: plan.bg, color: plan.color, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99 }}>{plan.label}</span>
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                      <span style={{ background: plan.bg, color: plan.color, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99 }}>{plan.label}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: isDark ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99 }}>
+                        <i className={'ti ' + pb.icon} style={{ fontSize: 11 }} /> {score.toFixed(1)}
+                      </span>
+                    </div>
                     {c.is_verified && <div style={{ fontSize: 10, color: '#1e8e3e', marginTop: 3 }}>✓ Verified</div>}
                   </div>
                 )
@@ -429,6 +493,8 @@ export default function Companies({ initialPlanFilter }) {
           {(() => {
             const plan   = PLANS[detailC.plan || 'free'] || PLANS.free
             const expiry = formatExpiry(detailC.plan_expires_at)
+            const score  = Number(detailC.performance_score) || 0
+            const pb     = perfBadge(score)
             const isDk   = document.documentElement.getAttribute('data-theme') === 'dark'
             const t  = isDk ? '#f1f5f9' : '#0f172a'
             const ts = isDk ? '#94a3b8' : '#64748b'
@@ -450,6 +516,9 @@ export default function Companies({ initialPlanFilter }) {
                     <div style={{ fontSize: 13, color: ts, marginTop: 2 }}>{detailC.category}{detailC.area ? ' · ' + detailC.area : ''}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{plan.label}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDk ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>
+                        <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)} performance
+                      </span>
                       <span style={{ background: detailC.status === 'approved' ? (isDk ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDk ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: detailC.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>{detailC.status}</span>
                       {detailC.is_verified && <span style={{ background: isDk ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>✓ Verified</span>}
                     </div>
@@ -468,6 +537,7 @@ export default function Companies({ initialPlanFilter }) {
                   {row('Email', detailC.email || detailC.owner_email)}
                   {row('Location', detailC.area || detailC.location)}
                   {row('Category', detailC.category)}
+                  {row('Performance Score', score.toFixed(1) + ' / 10')}
                   {row('Slug / URL', detailC.slug ? 'trustdubai.ae/' + detailC.slug : null)}
                   {row('Plan', plan.label + (detailC.plan_expires_at ? ' · ' + (expiry?.label || '') : ''))}
                   {row('Plan Started', detailC.plan_started_at ? new Date(detailC.plan_started_at).toLocaleDateString('en-AE') : null)}
