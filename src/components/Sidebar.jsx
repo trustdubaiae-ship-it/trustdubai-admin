@@ -34,6 +34,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { section: 'LEAD ENGINE' },
     { id: 'leads',         icon: 'ti-address-book',      label: 'All Leads',    show: true },
     { id: 'lead_forms',    icon: 'ti-forms',             label: 'Lead Forms',   show: isSuperAdmin },
+    { id: 'distribution',  icon: 'ti-route',             label: 'Distribution', show: isSuperAdmin },
 
     { section: 'REVENUE' },
     { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
