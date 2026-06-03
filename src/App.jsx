@@ -17,6 +17,7 @@ import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
 import Leads from './pages/Leads'
 import LeadForms from './pages/LeadForms'
+import Distribution from './pages/Distribution'
 import Sidebar from './components/Sidebar'
 import Users from './pages/Users'
 import Reports from './pages/Reports'
@@ -129,6 +130,7 @@ export default function App() {
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
         {page === 'leads'             && <Leads />}
         {page === 'lead_forms'        && isSuperAdmin && <LeadForms theme={theme} />}
+        {page === 'distribution'      && isSuperAdmin && <Distribution theme={theme} />}
         {page === 'categories'        && canAccess('manage_categories') && <Categories />}
         {page === 'employees'         && canAccess('manage_employees')  && <Employees />}
         {page === 'plans'             && canAccess('manage_plans')      && <Plans />}
