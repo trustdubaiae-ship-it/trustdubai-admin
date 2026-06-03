@@ -17,7 +17,6 @@ const SOURCES = [
   { key: 'own',      label: 'Own / Referral', color: '#7c3aed', bg: '#f5f3ff', icon: 'ti-user-plus' },
 ]
 
-// map a lead's raw source text to one of our 4 buckets
 function sourceBucket(raw) {
   const s = (raw || 'platform').toLowerCase()
   if (s.includes('meta') || s.includes('facebook') || s.includes('instagram')) return 'meta'
@@ -29,7 +28,7 @@ function sourceBucket(raw) {
 
 export default function Leads() {
   const [leads, setLeads]               = useState([])
-  const [dists, setDists]               = useState({})   // lead_id -> [{ name, rank }]
+  const [dists, setDists]               = useState({})
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -57,7 +56,6 @@ export default function Leads() {
       .order('created_at', { ascending: false })
     setLeads(leadsData || [])
 
-    // distributions for platform leads
     const { data: distData } = await supabase
       .from('lead_distributions')
       .select('lead_id, rank, companies(name)')
@@ -108,7 +106,6 @@ export default function Leads() {
   const statusConfig = (status) => LEAD_STATUSES.find(s => s.value === status) || LEAD_STATUSES[0]
   const sourceConfig = (key) => SOURCES.find(s => s.key === key) || SOURCES[0]
 
-  // overview stats (on period-filtered set)
   const totalLeads   = periodLeads.length
   const wonLeads     = periodLeads.filter(l => l.status === 'won').length
   const newLeads     = periodLeads.filter(l => !l.status || l.status === 'new').length
@@ -116,8 +113,11 @@ export default function Leads() {
   const distributed  = periodLeads.filter(l => l.distributed).length
   const wonRate      = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0
 
-  // source counts
   const srcCount = (key) => periodLeads.filter(l => sourceBucket(l.source) === key).length
+
+  function toggleSource(key) {
+    setSourceFilter(prev => prev === key ? 'all' : key)
+  }
 
   const text      = isDark ? '#f1f5f9' : '#0f172a'
   const textSub   = isDark ? '#94a3b8' : '#64748b'
@@ -168,20 +168,39 @@ export default function Leads() {
         ))}
       </div>
 
-      {/* Source stats (row 2) */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-        {SOURCES.map(s => (
-          <div key={s.key} style={{ flex: 1, minWidth: 150, background: cardBg, border: '1px solid ' + borderCol, borderRadius: 11, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: isDark ? 'rgba(255,255,255,0.05)' : s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <i className={'ti ' + s.icon} style={{ fontSize: 17, color: s.color }} />
+      {/* Source stats (row 2) — CLICKABLE FILTER */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        {SOURCES.map(s => {
+          const active = sourceFilter === s.key
+          return (
+            <div key={s.key} onClick={() => toggleSource(s.key)}
+              style={{ flex: 1, minWidth: 150, background: active ? (isDark ? s.color + '22' : s.bg) : cardBg,
+                border: '1.5px solid ' + (active ? s.color : borderCol), borderRadius: 11, padding: '10px 14px',
+                display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = s.color }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = borderCol }}
+            >
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: isDark ? 'rgba(255,255,255,0.05)' : s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className={'ti ' + s.icon} style={{ fontSize: 17, color: s.color }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: text, lineHeight: 1.1 }}>{srcCount(s.key)}</div>
+                <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
+              </div>
+              {active && <i className="ti ti-circle-check-filled" style={{ fontSize: 16, color: s.color }} />}
             </div>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: text, lineHeight: 1.1 }}>{srcCount(s.key)}</div>
-              <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
+
+      {/* active source hint */}
+      {sourceFilter !== 'all' && (
+        <div style={{ marginBottom: 14, fontSize: 12, color: textSub, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Showing <strong style={{ color: sourceConfig(sourceFilter).color }}>{sourceConfig(sourceFilter).label}</strong> leads only</span>
+          <button onClick={() => setSourceFilter('all')} style={{ fontSize: 11, color: '#03C1F5', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+        </div>
+      )}
+      {sourceFilter === 'all' && <div style={{ marginBottom: 14 }} />}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -190,10 +209,6 @@ export default function Leads() {
           placeholder="Search by name, phone, email, company..."
           style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, outline: 'none' }}
         />
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', outline: 'none' }}>
-          <option value="all">All Sources</option>
-          {SOURCES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-        </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', outline: 'none' }}>
           <option value="all">All Status</option>
           {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -240,7 +255,6 @@ export default function Leads() {
                       onMouseEnter={e => e.currentTarget.style.background = bgRow}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      {/* Customer */}
                       <td style={{ padding: '11px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ width: 32, height: 32, borderRadius: '50%', background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
@@ -257,14 +271,12 @@ export default function Leads() {
                         </div>
                       </td>
 
-                      {/* Source */}
                       <td style={{ padding: '11px 14px' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 99, background: isDark ? src.color + '22' : src.bg, color: src.color, whiteSpace: 'nowrap' }}>
                           <i className={'ti ' + src.icon} style={{ fontSize: 12 }} /> {src.label}
                         </span>
                       </td>
 
-                      {/* Company / Distribution */}
                       <td style={{ padding: '11px 14px' }}>
                         {isPlatform && leadDists.length > 0 ? (
                           <div style={{ fontSize: 12, color: text }}>
@@ -281,14 +293,12 @@ export default function Leads() {
                         ) : <span style={{ fontSize: 12, color: textMuted }}>—</span>}
                       </td>
 
-                      {/* Rank */}
                       <td style={{ padding: '11px 14px' }}>
                         {isPlatform && leadDists.length > 0
                           ? <span style={{ fontSize: 11, color: textSub }}>#{leadDists[0].rank} of {leadDists.length}</span>
                           : <span style={{ fontSize: 11, color: textMuted }}>—</span>}
                       </td>
 
-                      {/* Answers preview */}
                       <td style={{ padding: '11px 14px', maxWidth: 160 }}>
                         {lead.answers && Object.keys(lead.answers).length > 0 ? (
                           <div style={{ fontSize: 10.5, color: textSub, lineHeight: 1.5 }}>
@@ -305,7 +315,6 @@ export default function Leads() {
                         ) : <span style={{ fontSize: 11, color: textMuted }}>—</span>}
                       </td>
 
-                      {/* Status — editable dropdown */}
                       <td style={{ padding: '11px 14px' }}>
                         <select value={lead.status || 'new'} onChange={e => changeStatus(lead.id, e.target.value)}
                           style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
@@ -313,12 +322,10 @@ export default function Leads() {
                         </select>
                       </td>
 
-                      {/* Date */}
                       <td style={{ padding: '11px 14px', fontSize: 11.5, color: textMuted, whiteSpace: 'nowrap' }}>
                         {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}
                       </td>
 
-                      {/* Expand */}
                       <td style={{ padding: '11px 14px' }}>
                         <button onClick={() => setExpandedId(isExpanded ? null : lead.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: textMuted, fontSize: 12 }}>
                           {isExpanded ? '▲' : '▼'}
@@ -326,7 +333,6 @@ export default function Leads() {
                       </td>
                     </tr>
 
-                    {/* Expanded — full details */}
                     {isExpanded && (
                       <tr key={lead.id + '_expanded'} style={{ background: isDark ? 'rgba(3,193,245,0.04)' : '#f0fdff' }}>
                         <td colSpan={8} style={{ padding: '14px 16px', borderBottom: '1px solid ' + borderCol }}>
