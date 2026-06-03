@@ -10,12 +10,31 @@ const LEAD_STATUSES = [
   { value: 'lost',            label: 'Lost',            color: '#ef4444', bg: '#fef2f2' },
 ]
 
+const SOURCES = [
+  { key: 'platform', label: 'Platform',       color: '#0077aa', bg: '#e0f9ff', icon: 'ti-world' },
+  { key: 'meta',     label: 'Meta',           color: '#1877f2', bg: '#eff6ff', icon: 'ti-brand-meta' },
+  { key: 'whatsapp', label: 'WhatsApp',       color: '#0f7a52', bg: '#f0fdf4', icon: 'ti-brand-whatsapp' },
+  { key: 'own',      label: 'Own / Referral', color: '#7c3aed', bg: '#f5f3ff', icon: 'ti-user-plus' },
+]
+
+// map a lead's raw source text to one of our 4 buckets
+function sourceBucket(raw) {
+  const s = (raw || 'platform').toLowerCase()
+  if (s.includes('meta') || s.includes('facebook') || s.includes('instagram')) return 'meta'
+  if (s.includes('whatsapp') || s.includes('wati')) return 'whatsapp'
+  if (s.includes('referral') || s.includes('own') || s.includes('manual')) return 'own'
+  if (s.includes('platform') || s === '' || s === 'home') return 'platform'
+  return 'own'
+}
+
 export default function Leads() {
   const [leads, setLeads]               = useState([])
+  const [dists, setDists]               = useState({})   // lead_id -> [{ name, rank }]
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [companyFilter, setCompanyFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [companies, setCompanies]       = useState([])
   const [period, setPeriod]             = useState('all')
   const [expandedId, setExpandedId]     = useState(null)
@@ -37,6 +56,19 @@ export default function Leads() {
       .select('*, companies(name, category, owner_email)')
       .order('created_at', { ascending: false })
     setLeads(leadsData || [])
+
+    // distributions for platform leads
+    const { data: distData } = await supabase
+      .from('lead_distributions')
+      .select('lead_id, rank, companies(name)')
+      .order('rank', { ascending: true })
+    const map = {}
+    for (const d of distData || []) {
+      if (!map[d.lead_id]) map[d.lead_id] = []
+      map[d.lead_id].push({ name: d.companies?.name || '—', rank: d.rank })
+    }
+    setDists(map)
+
     const uniqueCompanies = [], seen = new Set()
     for (const l of leadsData || []) {
       if (l.company_id && !seen.has(l.company_id)) {
@@ -48,6 +80,11 @@ export default function Leads() {
     setLoading(false)
   }
 
+  async function changeStatus(leadId, newStatus) {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: newStatus } : l))
+    await supabase.from('lead_submissions').update({ status: newStatus }).eq('id', leadId)
+  }
+
   function filterByPeriod(data) {
     const now = new Date()
     if (period === 'today') return data.filter(l => l.created_at?.startsWith(now.toISOString().split('T')[0]))
@@ -56,9 +93,12 @@ export default function Leads() {
     return data
   }
 
-  const filtered = filterByPeriod(leads)
+  const periodLeads = filterByPeriod(leads)
+
+  const filtered = periodLeads
     .filter(l => statusFilter === 'all' ? true : (l.status || 'new') === statusFilter)
     .filter(l => companyFilter === 'all' ? true : l.company_id === companyFilter)
+    .filter(l => sourceFilter === 'all' ? true : sourceBucket(l.source) === sourceFilter)
     .filter(l => {
       if (!search) return true
       const s = search.toLowerCase()
@@ -66,18 +106,18 @@ export default function Leads() {
     })
 
   const statusConfig = (status) => LEAD_STATUSES.find(s => s.value === status) || LEAD_STATUSES[0]
+  const sourceConfig = (key) => SOURCES.find(s => s.key === key) || SOURCES[0]
 
-  const totalLeads  = filtered.length
-  const wonLeads    = filtered.filter(l => l.status === 'won').length
-  const newLeads    = filtered.filter(l => !l.status || l.status === 'new').length
-  const activeLeads = filtered.filter(l => !['won','lost'].includes(l.status || 'new')).length
-  const wonRate     = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0
+  // overview stats (on period-filtered set)
+  const totalLeads   = periodLeads.length
+  const wonLeads     = periodLeads.filter(l => l.status === 'won').length
+  const newLeads     = periodLeads.filter(l => !l.status || l.status === 'new').length
+  const activeLeads  = periodLeads.filter(l => !['won','lost'].includes(l.status || 'new')).length
+  const distributed  = periodLeads.filter(l => l.distributed).length
+  const wonRate      = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0
 
-  const companyBreakdown = companies.map(c => {
-    const cLeads = filtered.filter(l => l.company_id === c.id)
-    const cWon   = cLeads.filter(l => l.status === 'won').length
-    return { ...c, total: cLeads.length, won: cWon, rate: cLeads.length > 0 ? Math.round((cWon/cLeads.length)*100) : 0 }
-  }).filter(c => c.total > 0).sort((a,b) => b.total - a.total)
+  // source counts
+  const srcCount = (key) => periodLeads.filter(l => sourceBucket(l.source) === key).length
 
   const text      = isDark ? '#f1f5f9' : '#0f172a'
   const textSub   = isDark ? '#94a3b8' : '#64748b'
@@ -87,15 +127,14 @@ export default function Leads() {
   const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
 
   return (
-    <div style={{ maxWidth: 1100 }}>
+    <div style={{ maxWidth: 1180 }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: text, marginBottom: 4 }}>All Leads</h1>
-          <p style={{ fontSize: 13, color: textSub }}>All leads from all companies · {totalLeads} total</p>
+          <p style={{ fontSize: 13, color: textSub }}>Every lead — platform, company-added and Meta · {totalLeads} total</p>
         </div>
-        {/* Period Filter */}
         <div style={{ display: 'flex', gap: 4, background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9', borderRadius: 10, padding: 4, border: '1px solid ' + borderCol }}>
           {[
             { key: 'today', label: 'Today' },
@@ -107,72 +146,65 @@ export default function Leads() {
               padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
               fontSize: 12, fontWeight: 500,
               background: period === p.key ? '#03C1F5' : 'transparent',
-              color: period === p.key ? '#fff' : textSub,
-              transition: 'all 0.15s',
+              color: period === p.key ? '#fff' : textSub, transition: 'all 0.15s',
             }}>{p.label}</button>
           ))}
         </div>
       </div>
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
+      {/* Overview stats (row 1) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 10 }}>
         {[
-          { label: 'Total Leads', value: totalLeads,       color: '#03C1F5', icon: 'ti-address-book' },
-          { label: 'New',         value: newLeads,         color: '#8b5cf6', icon: 'ti-sparkles' },
-          { label: 'Active',      value: activeLeads,      color: '#f59e0b', icon: 'ti-activity' },
-          { label: 'Won',         value: wonLeads,         color: '#10b981', icon: 'ti-trophy' },
-          { label: 'Win Rate',    value: wonRate + '%',    color: '#10b981', icon: 'ti-chart-bar' },
+          { label: 'Total',       value: totalLeads,    color: '#03C1F5' },
+          { label: 'Distributed', value: distributed,   color: '#7c3aed' },
+          { label: 'New',         value: newLeads,      color: '#8b5cf6' },
+          { label: 'Active',      value: activeLeads,   color: '#f59e0b' },
+          { label: 'Won Rate',    value: wonRate + '%', color: '#10b981' },
         ].map(s => (
-          <div key={s.label} style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: isDark ? 'none' : '0 1px 4px rgba(0,0,0,0.04)' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid ' + borderCol, flexShrink: 0 }}>
-              <i className={'ti ' + s.icon} style={{ fontSize: 16, color: s.color }} />
+          <div key={s.label} style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 11, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1.2 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Source stats (row 2) */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        {SOURCES.map(s => (
+          <div key={s.key} style={{ flex: 1, minWidth: 150, background: cardBg, border: '1px solid ' + borderCol, borderRadius: 11, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: isDark ? 'rgba(255,255,255,0.05)' : s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <i className={'ti ' + s.icon} style={{ fontSize: 17, color: s.color }} />
             </div>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: textSub, marginTop: 2 }}>{s.label}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: text, lineHeight: 1.1 }}>{srcCount(s.key)}</div>
+              <div style={{ fontSize: 11, color: textSub }}>{s.label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Company Breakdown */}
-      {companyBreakdown.length > 0 && (
-        <div style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 14, padding: 18, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: text, marginBottom: 14 }}>📊 Company-wise Conversion</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {companyBreakdown.map(c => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: text, width: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                <div style={{ flex: 1, height: 6, background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ width: c.rate + '%', height: '100%', background: c.rate >= 50 ? '#10b981' : c.rate >= 25 ? '#f59e0b' : '#03C1F5', borderRadius: 99, transition: 'width 0.8s ease' }} />
-                </div>
-                <div style={{ fontSize: 12, color: textSub, width: 90, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {c.won}/{c.total} · <strong style={{ color: '#10b981' }}>{c.rate}%</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, phone, email, company..."
           style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, outline: 'none' }}
         />
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', outline: 'none' }}>
+          <option value="all">All Sources</option>
+          {SOURCES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', outline: 'none' }}>
           <option value="all">All Status</option>
           {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', maxWidth: 200, outline: 'none' }}>
+        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid ' + borderCol, borderRadius: 8, fontSize: 13, background: cardBg, color: text, cursor: 'pointer', maxWidth: 180, outline: 'none' }}>
           <option value="all">All Companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 
-      {/* Leads List */}
+      {/* Leads list */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60 }}>
           <div style={{ width: 36, height: 36, border: '3px solid #03C1F5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
@@ -190,106 +222,135 @@ export default function Leads() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: bgRow }}>
-                {['Customer', 'Contact', 'Company', 'Answers', 'Status', 'Date', ''].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol }}>{h}</th>
+                {['Customer', 'Source', 'Company / Distribution', 'Rank', 'Answers', 'Status', 'Date', ''].map(h => (
+                  <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map(lead => {
-                const sc = statusConfig(lead.status || 'new')
+                const sc  = statusConfig(lead.status || 'new')
+                const src = sourceConfig(sourceBucket(lead.source))
                 const isExpanded = expandedId === lead.id
+                const leadDists = dists[lead.id] || []
+                const isPlatform = sourceBucket(lead.source) === 'platform'
                 return (
                   <>
-                    <tr key={lead.id} style={{ borderBottom: '1px solid ' + borderCol, cursor: 'pointer' }}
+                    <tr key={lead.id} style={{ borderBottom: '1px solid ' + borderCol }}
                       onMouseEnter={e => e.currentTarget.style.background = bgRow}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       {/* Customer */}
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '11px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                             {(lead.name || 'A')[0].toUpperCase()}
                           </div>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: text }}>{lead.name || 'Anonymous'}</div>
-                            <div style={{ fontSize: 11, color: textMuted }}>{lead.email || '—'}</div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: text }}>{lead.name || 'Anonymous'}</div>
+                            <div style={{ fontSize: 10.5, color: textMuted }}>
+                              {lead.phone ? (
+                                <a href={'https://wa.me/' + lead.phone.replace(/[^0-9]/g, '')} target="_blank" rel="noreferrer" style={{ color: '#10b981', textDecoration: 'none' }}>💬 {lead.phone}</a>
+                              ) : (lead.email || '—')}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Contact */}
-                      <td style={{ padding: '12px 16px' }}>
-                        {lead.phone ? (
-                          <a href={'https://wa.me/' + lead.phone.replace(/[^0-9]/g, '')} target="_blank" rel="noreferrer"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? 'rgba(16,185,129,0.1)' : '#f0fdf4', color: '#10b981', fontSize: 12, fontWeight: 500, padding: '4px 8px', borderRadius: 6, textDecoration: 'none', border: '1px solid ' + (isDark ? 'rgba(16,185,129,0.2)' : '#a7f3d0') }}>
-                            💬 {lead.phone}
-                          </a>
+                      {/* Source */}
+                      <td style={{ padding: '11px 14px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 99, background: isDark ? src.color + '22' : src.bg, color: src.color, whiteSpace: 'nowrap' }}>
+                          <i className={'ti ' + src.icon} style={{ fontSize: 12 }} /> {src.label}
+                        </span>
+                      </td>
+
+                      {/* Company / Distribution */}
+                      <td style={{ padding: '11px 14px' }}>
+                        {isPlatform && leadDists.length > 0 ? (
+                          <div style={{ fontSize: 12, color: text }}>
+                            {leadDists[0].name}
+                            {leadDists.length > 1 && <span style={{ color: textMuted }}> +{leadDists.length - 1} more</span>}
+                          </div>
+                        ) : lead.companies?.name ? (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: text }}>{lead.companies.name}</div>
+                            <div style={{ fontSize: 10.5, color: textMuted }}>{lead.companies.category || ''}</div>
+                          </div>
+                        ) : isPlatform ? (
+                          <span style={{ fontSize: 11, color: textMuted }}>Not distributed</span>
                         ) : <span style={{ fontSize: 12, color: textMuted }}>—</span>}
                       </td>
 
-                      {/* Company */}
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: text }}>{lead.companies?.name || '—'}</div>
-                        <div style={{ fontSize: 11, color: textMuted }}>{lead.companies?.category || ''}</div>
+                      {/* Rank */}
+                      <td style={{ padding: '11px 14px' }}>
+                        {isPlatform && leadDists.length > 0
+                          ? <span style={{ fontSize: 11, color: textSub }}>#{leadDists[0].rank} of {leadDists.length}</span>
+                          : <span style={{ fontSize: 11, color: textMuted }}>—</span>}
                       </td>
 
                       {/* Answers preview */}
-                      <td style={{ padding: '12px 16px', maxWidth: 180 }}>
+                      <td style={{ padding: '11px 14px', maxWidth: 160 }}>
                         {lead.answers && Object.keys(lead.answers).length > 0 ? (
-                          <div style={{ fontSize: 11, color: textSub, lineHeight: 1.6 }}>
+                          <div style={{ fontSize: 10.5, color: textSub, lineHeight: 1.5 }}>
                             {Object.entries(lead.answers).slice(0, 2).map(([q, a]) => (
-                              <div key={q}>
-                                <span style={{ color: textMuted }}>{q.slice(0, 15)}:</span>{' '}
-                                <strong style={{ color: text }}>{String(a).slice(0, 20)}</strong>
+                              <div key={q} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: textMuted }}>{q.slice(0, 14)}:</span>{' '}
+                                <strong style={{ color: text }}>{String(a).slice(0, 18)}</strong>
                               </div>
                             ))}
                             {Object.keys(lead.answers).length > 2 && (
                               <div style={{ color: textMuted }}>+{Object.keys(lead.answers).length - 2} more</div>
                             )}
                           </div>
-                        ) : <span style={{ fontSize: 12, color: textMuted }}>—</span>}
+                        ) : <span style={{ fontSize: 11, color: textMuted }}>—</span>}
                       </td>
 
-                      {/* Status */}
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ padding: '4px 12px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, display: 'inline-block', whiteSpace: 'nowrap' }}>
-                          {sc.label}
-                        </span>
+                      {/* Status — editable dropdown */}
+                      <td style={{ padding: '11px 14px' }}>
+                        <select value={lead.status || 'new'} onChange={e => changeStatus(lead.id, e.target.value)}
+                          style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
+                          {LEAD_STATUSES.map(s => <option key={s.value} value={s.value} style={{ background: cardBg, color: text }}>{s.label}</option>)}
+                        </select>
                       </td>
 
                       {/* Date */}
-                      <td style={{ padding: '12px 16px', fontSize: 12, color: textMuted, whiteSpace: 'nowrap' }}>
-                        {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      <td style={{ padding: '11px 14px', fontSize: 11.5, color: textMuted, whiteSpace: 'nowrap' }}>
+                        {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}
                       </td>
 
                       {/* Expand */}
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '11px 14px' }}>
                         <button onClick={() => setExpandedId(isExpanded ? null : lead.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: textMuted, fontSize: 12 }}>
                           {isExpanded ? '▲' : '▼'}
                         </button>
                       </td>
                     </tr>
 
-                    {/* Expanded Row — Full Answers */}
+                    {/* Expanded — full details */}
                     {isExpanded && (
                       <tr key={lead.id + '_expanded'} style={{ background: isDark ? 'rgba(3,193,245,0.04)' : '#f0fdff' }}>
-                        <td colSpan={7} style={{ padding: '14px 16px', borderBottom: '1px solid ' + borderCol }}>
+                        <td colSpan={8} style={{ padding: '14px 16px', borderBottom: '1px solid ' + borderCol }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: textSub, marginBottom: 10 }}>📋 Full Lead Details</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginBottom: leadDists.length > 0 ? 12 : 0 }}>
                             {lead.answers && Object.entries(lead.answers).map(([q, a]) => (
                               <div key={q} style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 8, padding: '8px 12px' }}>
                                 <div style={{ fontSize: 11, color: textMuted, marginBottom: 2 }}>{q}</div>
                                 <div style={{ fontSize: 13, fontWeight: 500, color: text }}>{String(a)}</div>
                               </div>
                             ))}
-                            {lead.source_url && (
-                              <div style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 8, padding: '8px 12px' }}>
-                                <div style={{ fontSize: 11, color: textMuted, marginBottom: 2 }}>Source URL</div>
-                                <div style={{ fontSize: 12, color: '#03C1F5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.source_url}</div>
-                              </div>
-                            )}
                           </div>
+                          {leadDists.length > 0 && (
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 6 }}>Distributed to:</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {leadDists.map((d, i) => (
+                                  <span key={i} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, background: cardBg, border: '1px solid ' + borderCol, color: text }}>
+                                    #{d.rank} {d.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
