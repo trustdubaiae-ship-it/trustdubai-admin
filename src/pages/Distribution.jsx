@@ -208,20 +208,16 @@ export default function Distribution({ theme }) {
 
             {/* Ranking */}
             <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', margin:'18px 0 8px', fontWeight:700 }}>Ranking Order (who gets it first)</div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:6 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:4 }}>
               {['Plan tier ↑','Trust score ↑','Rating ↑','Fair rotation'].map((r,i) => (
                 <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i<3?'#e0f9ff':bg, color: i<3?'#0077aa':muted, border:`1px solid ${i<3?'#b3d9f0':border}` }}>{r}</span>
               ))}
             </div>
 
-            {/* Disclaimer */}
-            <div style={{ marginTop:16, padding:'12px 14px', background: isDark?'#1a2332':'#fffbeb', border:`1px solid ${isDark?'#3a3320':'#fde68a'}`, borderRadius:9 }}>
-              <div style={{ fontSize:12, fontWeight:700, color: isDark?'#fbbf24':'#92400e', marginBottom:4, display:'flex', alignItems:'center', gap:6 }}>
-                <i className="ti ti-info-circle" style={{ fontSize:14 }} /> Distribution is not guaranteed
-              </div>
-              <div style={{ fontSize:11.5, color: isDark?'#d4a843':'#a16207', lineHeight:1.5 }}>
-                Lead volume depends on real customer demand and each company's performance — response time, service quality, reviews and Trust Score. Buying a plan does not guarantee a fixed number of leads. The engine decides distribution automatically.
-              </div>
+            {/* small internal note */}
+            <div style={{ marginTop:14, fontSize:11.5, color:muted, display:'flex', alignItems:'center', gap:6 }}>
+              <i className="ti ti-info-circle" style={{ fontSize:13, color:accent }} />
+              Performance-based — full no-guarantee terms shown to companies at plan purchase.
             </div>
           </div>
         )}
