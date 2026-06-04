@@ -33,6 +33,8 @@ import SuperAdminSettings from './pages/SuperAdminSettings'
 import BadgeManager from './pages/BadgeManager'
 import VerificationQueue from './pages/VerificationQueue'
 
+const SAFE_TOP = 'env(safe-area-inset-top)'
+
 export default function App() {
   const [session,    setSession]    = useState(null)
   const [isAdmin,    setIsAdmin]    = useState(false)
@@ -41,6 +43,16 @@ export default function App() {
   const [page,       setPage]       = useState('dashboard')
   const [planFilter, setPlanFilter] = useState('all')
   const [theme,      setTheme]      = useState(() => localStorage.getItem('admin_theme') || 'dark')
+
+  // responsive + mobile drawer
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const isMobile = vw < 900
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -74,6 +86,12 @@ export default function App() {
     if (!adminData) return false
     if (adminData.role === 'superadmin' || adminData.role === 'super_admin') return true
     return adminData.permissions?.[permission] === true
+  }
+
+  // navigate helper — also closes the mobile drawer
+  function goPage(p) {
+    setPage(p)
+    setSidebarOpen(false)
   }
 
   const isSuperAdmin = adminData?.role === 'superadmin' || adminData?.role === 'super_admin'
@@ -120,11 +138,70 @@ export default function App() {
     </div>
   )
 
+  const TOPBAR_H = 52
+
   return (
     <div style={{ display:'flex', minHeight:'100vh', background: isDark?'#0d1117':'#f0f4f8' }}>
-      <Sidebar page={page} setPage={setPage} session={session} adminData={adminData} canAccess={canAccess} theme={theme} setTheme={setTheme} />
-      <div style={{ flex:1, marginLeft:210, padding:20, background: isDark?'#0d1117':'#f0f4f8', minHeight:'100vh', overflowX:'hidden' }}>
-        {page === 'dashboard'         && <Dashboard setPage={setPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
+
+      {/* Mobile drawer overlay */}
+      {isMobile && sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:99 }} />
+      )}
+
+      <Sidebar
+        page={page}
+        setPage={goPage}
+        session={session}
+        adminData={adminData}
+        canAccess={canAccess}
+        theme={theme}
+        setTheme={setTheme}
+        isMobile={isMobile}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* Mobile fixed topbar (hamburger + brand) */}
+      {isMobile && (
+        <div style={{
+          position:'fixed', top:0, left:0, right:0, zIndex:60,
+          height:`calc(${TOPBAR_H}px + ${SAFE_TOP})`, paddingTop:SAFE_TOP,
+          background: isDark?'#0d1117':'#ffffff',
+          borderBottom:`0.5px solid ${isDark?'rgba(255,255,255,0.07)':'#e2e8f0'}`,
+          display:'flex', alignItems:'center', gap:12, padding:`${SAFE_TOP} 14px 0`,
+        }}>
+          <button onClick={() => setSidebarOpen(true)} aria-label="Menu"
+            style={{ width:36, height:36, borderRadius:8, border:`0.5px solid ${isDark?'rgba(255,255,255,0.1)':'#e2e8f0'}`, background: isDark?'#161b22':'#f8fafc', color: isDark?'#f0fdf4':'#0f172a', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <i className="ti ti-menu-2" style={{ fontSize:20 }} />
+          </button>
+          <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+            <div style={{ width:30, height:30, background:'linear-gradient(135deg,#0f6e56,#1d9e75)', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L4 6V12C4 16.4 7.4 20.5 12 22C16.6 20.5 20 16.4 20 12V6L12 2Z" fill="rgba(255,255,255,0.15)" stroke="#4ade80" strokeWidth="1.5"/>
+                <polyline points="8.5,12 11,14.5 15.5,10" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div style={{ fontSize:14, fontWeight:700, color: isDark?'#f0fdf4':'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              TRUST<span style={{ color:'#4ade80' }}>DUBAI</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{
+        flex:1,
+        marginLeft: isMobile ? 0 : 210,
+        padding: isMobile ? '14px' : 20,
+        paddingTop: isMobile ? `calc(14px + ${TOPBAR_H}px + ${SAFE_TOP})` : 20,
+        paddingBottom: `calc(${isMobile ? 14 : 20}px + env(safe-area-inset-bottom))`,
+        background: isDark?'#0d1117':'#f0f4f8',
+        minHeight:'100vh',
+        overflowX:'hidden',
+        maxWidth:'100%',
+        minWidth:0,
+      }}>
+        {page === 'dashboard'         && <Dashboard setPage={goPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
         {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
