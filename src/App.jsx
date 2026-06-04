@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import RevenueEngine from './pages/RevenueEngine'
+import ControlWall from './pages/ControlWall'
 import Companies from './pages/Companies'
 import Reviews from './pages/Reviews'
 import Categories from './pages/Categories'
@@ -38,7 +39,7 @@ const SAFE_TOP = 'env(safe-area-inset-top)'
 
 // All valid page keys (used to validate the URL hash on load)
 const VALID_PAGES = new Set([
-  'dashboard','revenue_engine','inbox','companies','reviews','leads','lead_forms','distribution',
+  'dashboard','control_wall','revenue_engine','inbox','companies','reviews','leads','lead_forms','distribution',
   'categories','employees','plans','plan_features','bulk','team','team_verification',
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
@@ -164,6 +165,11 @@ export default function App() {
       </div>
     </div>
   )
+
+  // Control Wall = full-screen standalone page (no sidebar/topbar)
+  if (page === 'control_wall') {
+    return <ControlWall onBack={() => goPage('dashboard')} theme={theme} />
+  }
 
   const TOPBAR_H = 52
 
