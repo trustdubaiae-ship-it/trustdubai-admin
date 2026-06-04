@@ -124,6 +124,28 @@ export default function ControlWall({ onBack, theme: initialTheme }) {
   const isDark = theme !== 'light'
   const toggleTheme = () => setTheme(t => { const n = t==='dark'?'light':'dark'; try{localStorage.setItem('td-wall-theme',n)}catch{} return n })
 
+  // Real browser fullscreen toggle (hides tab bar / address bar like F11)
+  const [isFs, setIsFs] = useState(false)
+  const toggleFullscreen = () => {
+    try {
+      const el = document.documentElement
+      if (!document.fullscreenElement) {
+        (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen)?.call(el)
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen)?.call(document)
+      }
+    } catch (e) { /* ignore — some browsers block without user gesture */ }
+  }
+  useEffect(() => {
+    const onFsChange = () => setIsFs(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
+    }
+  }, [])
+
   const [scale, setScale] = useState(1)
   useEffect(() => {
     const fit = () => setScale(Math.min(window.innerWidth/BASE_W, window.innerHeight/BASE_H))
@@ -323,6 +345,7 @@ export default function ControlWall({ onBack, theme: initialTheme }) {
             <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:G.green, background:G.green+'18', borderRadius:8, padding:'4px 9px', fontWeight:600 }}><span style={{ width:7, height:7, borderRadius:'50%', background:G.green }}/>Live</span>
             <span style={{ fontSize:10.5, color:C.text3 }}>Updated {updated?updated.toLocaleTimeString('en-AE',{hour:'2-digit',minute:'2-digit'}):'—'}</span>
             <button onClick={load} title="Refresh" style={{ width:30, height:30, borderRadius:8, background:C.card2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><i className="ti ti-refresh" style={{ fontSize:15, animation:refreshing?'spin .8s linear infinite':'none' }}/></button>
+            <button onClick={toggleFullscreen} title={isFs?'Exit fullscreen':'Enter fullscreen'} style={{ width:30, height:30, borderRadius:8, background:C.card2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><i className={`ti ${isFs?'ti-minimize':'ti-maximize'}`} style={{ fontSize:15 }}/></button>
             <button onClick={toggleTheme} title="Toggle theme" style={{ width:30, height:30, borderRadius:8, background:C.card2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><i className={`ti ${isDark?'ti-sun':'ti-moon'}`} style={{ fontSize:15 }}/></button>
           </div>
         </div>
