@@ -226,7 +226,7 @@ export default function Distribution({ theme }) {
             {[
               { key:'match_category', icon:'ti-category', label:'Match by category', sub:'Lead category must match company category', locked:true },
               { key:'match_area',     icon:'ti-map-pin',  label:'Match by area',     sub:'Lead area must match company service area' },
-              { key:'match_budget',   icon:'ti-coin',     label:'Match by budget',   sub:'Lead budget within company range' },
+              { key:'match_budget',   icon:'ti-coin',     label:'Match by budget',   sub:'Lead budget within company range (needs structured budget — off for now)' },
               { key:'respect_quota',  icon:'ti-gauge',    label:'Respect monthly quota', sub:'Stop sending once plan limit reached' },
             ].map(r => (
               <div key={r.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', border:`1px solid ${border}`, borderRadius:9, marginBottom:7 }}>
@@ -239,11 +239,37 @@ export default function Distribution({ theme }) {
               </div>
             ))}
 
+            {/* Quality gates — toggle + number */}
+            {[
+              { onKey:'min_trust_enabled', valKey:'min_trust_value', icon:'ti-shield-check', label:'Minimum trust score', sub:'Only send to companies at or above this trust score', max:100, step:1 },
+              { onKey:'min_rating_enabled', valKey:'min_rating_value', icon:'ti-star', label:'Minimum rating', sub:'Only send to companies at or above this star rating', max:5, step:0.5 },
+            ].map(r => (
+              <div key={r.onKey} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', border:`1px solid ${border}`, borderRadius:9, marginBottom:7 }}>
+                <i className={`ti ${r.icon}`} style={{ fontSize:16, color: selected[r.onKey] ? accent : muted }} />
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13.5, fontWeight:600, color:text }}>{r.label}</div>
+                  <div style={{ fontSize:11.5, color:muted }}>{r.sub}</div>
+                </div>
+                {selected[r.onKey] && (
+                  <input type="number" min={0} max={r.max} step={r.step}
+                    value={selected[r.valKey] ?? 0}
+                    onChange={e => updateField(r.valKey, parseFloat(e.target.value) || 0)}
+                    style={{ width:56, padding:'6px', textAlign:'center', fontSize:14, fontWeight:700, color:accent, background:bg, border:`1px solid ${border}`, borderRadius:8, outline:'none' }} />
+                )}
+                <Toggle on={selected[r.onKey]} onChange={v => updateField(r.onKey, v)} />
+              </div>
+            ))}
+
             {/* Ranking */}
             <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', margin:'18px 0 8px', fontWeight:700 }}>Ranking Order (who gets it first)</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:4 }}>
-              {['1 · Fewest leads first (fair)','2 · Plan tier','3 · Trust score','4 · Rating'].map((r,i) => (
-                <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i===0?'#d1fae5':'#e0f9ff', color: i===0?'#065f46':'#0077aa', border:`1px solid ${i===0?'#a7f3d0':'#b3d9f0'}` }}>{r}</span>
+              {[
+                ...(selected.fair_rotation ? ['Fewest leads first (fair)'] : []),
+                'Plan tier','Trust score','Rating',
+                ...(selected.min_trust_enabled ? [`Min trust ${selected.min_trust_value||0}`] : []),
+                ...(selected.min_rating_enabled ? [`Min rating ${selected.min_rating_value||0}★`] : []),
+              ].map((r,i) => (
+                <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i===0 && selected.fair_rotation ? '#d1fae5' : '#e0f9ff', color: i===0 && selected.fair_rotation ? '#065f46' : '#0077aa', border:`1px solid ${i===0 && selected.fair_rotation ? '#a7f3d0' : '#b3d9f0'}` }}>{r}</span>
               ))}
             </div>
 
@@ -261,7 +287,7 @@ export default function Distribution({ theme }) {
         <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8, fontWeight:700 }}>Monthly Lead Quota per Plan</div>
         <div style={{ background:card, border:`1px solid ${border}`, borderRadius:12, padding:'16px 18px' }}>
           <p style={{ fontSize:12.5, color:muted, margin:'0 0 14px' }}>
-            Max leads each plan receives per calendar month. Resets automatically on the 1st. The distribution engine skips a company once its plan quota is reached.
+            Max leads each plan receives per calendar month. Resets automatically on the 1st. The engine only enforces this when a template's <b>Respect monthly quota</b> toggle is ON.
           </p>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12 }}>
             {quotas.length === 0 ? (
