@@ -13,7 +13,8 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
   // ---- Menu structure: flat items + collapsible groups ----
   const STRUCTURE = [
     { section: 'MAIN' },
-    { id: 'dashboard',     icon: 'ti-layout-dashboard',  label: 'Dashboard',    show: true },
+    { id: 'dashboard',      icon: 'ti-layout-dashboard',      label: 'Command Center', show: true },
+    { id: 'revenue_engine', icon: 'ti-gauge',                 label: 'Revenue Engine', show: true },
     { id: 'inbox',         icon: 'ti-mail',              label: 'Inbox',        show: true },
     { id: 'notifications', icon: 'ti-bell',              label: 'Notifications',show: true },
     { id: 'companies',     icon: 'ti-building-store',    label: 'Businesses',   show: canAccess('view_companies') },
