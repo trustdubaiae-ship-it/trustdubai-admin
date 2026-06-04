@@ -1,6 +1,6 @@
 // trustdubai-admin/src/pages/ControlWall.jsx
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../supabase'
 
 /* =========================================================================
    TrustDubai — CONTROL WALL
