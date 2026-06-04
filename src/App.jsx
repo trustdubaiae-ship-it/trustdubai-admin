@@ -35,12 +35,28 @@ import VerificationQueue from './pages/VerificationQueue'
 
 const SAFE_TOP = 'env(safe-area-inset-top)'
 
+// All valid page keys (used to validate the URL hash on load)
+const VALID_PAGES = new Set([
+  'dashboard','inbox','companies','reviews','leads','lead_forms','distribution',
+  'categories','employees','plans','plan_features','bulk','team','team_verification',
+  'doc_verification','applications','verification','plan_approvals','accounts','users',
+  'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
+  'notifications','sponsor_slots','settings','badges_manager',
+])
+
+// Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
+function getHashPage() {
+  if (typeof window === 'undefined') return 'dashboard'
+  const h = (window.location.hash || '').replace(/^#/, '').trim()
+  return VALID_PAGES.has(h) ? h : 'dashboard'
+}
+
 export default function App() {
   const [session,    setSession]    = useState(null)
   const [isAdmin,    setIsAdmin]    = useState(false)
   const [adminData,  setAdminData]  = useState(null)
   const [loading,    setLoading]    = useState(true)
-  const [page,       setPage]       = useState('dashboard')
+  const [page,       setPage]       = useState(getHashPage)   // ← persists across refresh via URL hash
   const [planFilter, setPlanFilter] = useState('all')
   const [theme,      setTheme]      = useState(() => localStorage.getItem('admin_theme') || 'dark')
 
@@ -53,6 +69,13 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
   const isMobile = vw < 900
+
+  // Keep page in sync with the URL hash (browser back/forward + manual hash change)
+  useEffect(() => {
+    const onHash = () => setPage(getHashPage())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -88,10 +111,13 @@ export default function App() {
     return adminData.permissions?.[permission] === true
   }
 
-  // navigate helper — also closes the mobile drawer
+  // navigate helper — updates URL hash (persistence) + closes the mobile drawer
   function goPage(p) {
     setPage(p)
     setSidebarOpen(false)
+    if (typeof window !== 'undefined' && window.location.hash.replace(/^#/, '') !== p) {
+      window.location.hash = p
+    }
   }
 
   const isSuperAdmin = adminData?.role === 'superadmin' || adminData?.role === 'super_admin'
