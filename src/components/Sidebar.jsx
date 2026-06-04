@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
-export default function Sidebar({ page, setPage, session, adminData, canAccess, theme, setTheme }) {
+const SAFE_TOP = 'env(safe-area-inset-top)'
+
+export default function Sidebar({ page, setPage, session, adminData, canAccess, theme, setTheme, isMobile = false, open = false, onClose }) {
   const isSuperAdmin = adminData?.role === 'superadmin' || adminData?.role === 'super_admin'
   const isSales      = adminData?.role === 'sales'    || isSuperAdmin
   const isAccounts   = adminData?.role === 'accounts' || isSuperAdmin
@@ -59,7 +61,6 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { id: 'system_health', icon: 'ti-server',             label: 'System Health',  show: isSuperAdmin },
   ]
 
-  // which group contains the active page (for auto-open)
   function groupOfPage(pid) {
     for (const item of STRUCTURE) {
       if (item.group && item.children?.some(c => c.id === pid)) return item.group
@@ -69,7 +70,6 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
 
   const [openGroup, setOpenGroup] = useState(() => groupOfPage(page))
 
-  // when active page changes (e.g. via dashboard shortcut), auto-open its group
   useEffect(() => {
     const g = groupOfPage(page)
     if (g) setOpenGroup(g)
@@ -120,7 +120,6 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     if (children.length === 0) return null
     const isOpen = openGroup === item.group
     const containsActive = children.some(c => c.id === page)
-    // total badge count on collapsed parent
     const badgeSum = children.reduce((n,c) => n + (c.badge ? parseInt(c.badge,10) || 0 : 0), 0)
 
     return (
@@ -144,8 +143,20 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     )
   }
 
+  // mobile drawer transform
+  const mobileTransform = isMobile ? (open ? 'translateX(0)' : 'translateX(-100%)') : 'none'
+
   return (
-    <div style={{ width:210, background:SB.bg, position:'fixed', top:0, left:0, height:'100vh', display:'flex', flexDirection:'column', zIndex:100, borderRight:`0.5px solid ${SB.border}`, transition:'background 0.2s, border-color 0.2s' }}>
+    <div style={{
+      width:210, background:SB.bg, position:'fixed', top:0, left:0, height:'100vh',
+      display:'flex', flexDirection:'column',
+      zIndex: isMobile ? 100 : 100,
+      borderRight:`0.5px solid ${SB.border}`,
+      transition:'transform 0.25s ease, background 0.2s, border-color 0.2s',
+      transform: mobileTransform,
+      boxShadow: isMobile && open ? '0 0 30px rgba(0,0,0,0.35)' : 'none',
+      paddingTop: SAFE_TOP,
+    }}>
 
       <div style={{ padding:'16px 14px 14px', borderBottom:`0.5px solid ${SB.border}`, display:'flex', alignItems:'center', gap:10 }}>
         <div style={{ width:36, height:36, background:'linear-gradient(135deg,#0f6e56,#1d9e75)', borderRadius:9, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -154,12 +165,18 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
             <polyline points="8.5,12 11,14.5 15.5,10" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div>
+        <div style={{ flex:1 }}>
           <div style={{ fontSize:14, fontWeight:700, color:SB.logoText, letterSpacing:'-0.2px' }}>
             TRUST<span style={{ color:SB.logoAccent }}>DUBAI</span>
           </div>
           <div style={{ fontSize:8.5, color:SB.logoSub, marginTop:1 }}>Super Admin Panel</div>
         </div>
+        {isMobile && (
+          <button onClick={onClose} aria-label="Close menu"
+            style={{ width:28, height:28, borderRadius:7, border:`0.5px solid ${SB.border}`, background:'transparent', color:SB.itemColor, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <i className="ti ti-x" style={{ fontSize:16 }} />
+          </button>
+        )}
       </div>
 
       <div style={{ padding:'8px 10px', borderBottom:`0.5px solid ${SB.border}`, display:'flex', gap:5 }}>
@@ -186,7 +203,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
         })}
       </nav>
 
-      <div style={{ padding:'10px 14px', borderTop:`0.5px solid ${SB.border}`, display:'flex', alignItems:'center', gap:8, background:SB.footerBg }}>
+      <div style={{ padding:'10px 14px', borderTop:`0.5px solid ${SB.border}`, display:'flex', alignItems:'center', gap:8, background:SB.footerBg, paddingBottom:`calc(10px + env(safe-area-inset-bottom))` }}>
         <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#0f6e56,#1d9e75)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#fff', flexShrink:0 }}>
           {(adminData?.full_name||session?.user?.email||'A')[0].toUpperCase()}
         </div>
