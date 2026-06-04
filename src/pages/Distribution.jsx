@@ -239,10 +239,11 @@ export default function Distribution({ theme }) {
               </div>
             ))}
 
-            {/* Quality gates — toggle + number */}
+            {/* Quality gates — toggle + optional number */}
             {[
               { onKey:'min_trust_enabled', valKey:'min_trust_value', icon:'ti-shield-check', label:'Minimum trust score', sub:'Only send to companies at or above this trust score', max:100, step:1 },
               { onKey:'min_rating_enabled', valKey:'min_rating_value', icon:'ti-star', label:'Minimum rating', sub:'Only send to companies at or above this star rating', max:5, step:0.5 },
+              { onKey:'min_value_enabled', valKey:null, icon:'ti-coin', label:'Minimum job value', sub:'Only send a lead to companies whose minimum job value is at or below the lead budget (each company sets its own minimum)' },
             ].map(r => (
               <div key={r.onKey} style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', border:`1px solid ${border}`, borderRadius:9, marginBottom:7 }}>
                 <i className={`ti ${r.icon}`} style={{ fontSize:16, color: selected[r.onKey] ? accent : muted }} />
@@ -250,7 +251,7 @@ export default function Distribution({ theme }) {
                   <div style={{ fontSize:13.5, fontWeight:600, color:text }}>{r.label}</div>
                   <div style={{ fontSize:11.5, color:muted }}>{r.sub}</div>
                 </div>
-                {selected[r.onKey] && (
+                {r.valKey && selected[r.onKey] && (
                   <input type="number" min={0} max={r.max} step={r.step}
                     value={selected[r.valKey] ?? 0}
                     onChange={e => updateField(r.valKey, parseFloat(e.target.value) || 0)}
@@ -268,6 +269,7 @@ export default function Distribution({ theme }) {
                 'Plan tier','Trust score','Rating',
                 ...(selected.min_trust_enabled ? [`Min trust ${selected.min_trust_value||0}`] : []),
                 ...(selected.min_rating_enabled ? [`Min rating ${selected.min_rating_value||0}★`] : []),
+                ...(selected.min_value_enabled ? ['Min job value'] : []),
               ].map((r,i) => (
                 <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i===0 && selected.fair_rotation ? '#d1fae5' : '#e0f9ff', color: i===0 && selected.fair_rotation ? '#065f46' : '#0077aa', border:`1px solid ${i===0 && selected.fair_rotation ? '#a7f3d0' : '#b3d9f0'}` }}>{r}</span>
               ))}
