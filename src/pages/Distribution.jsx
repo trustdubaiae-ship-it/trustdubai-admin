@@ -9,6 +9,8 @@ export default function Distribution({ theme }) {
   const [recentDist, setRecentDist] = useState([])
   const [stats, setStats]           = useState({ total: 0, today: 0, companies: 0 })
   const [toast, setToast]           = useState('')
+  const [quotas, setQuotas]         = useState([])
+  const [quotaSaving, setQuotaSaving] = useState(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -43,6 +45,13 @@ export default function Distribution({ theme }) {
         .select('company_id')
       const uniqueCos = new Set((distinctCo || []).map(d => d.company_id)).size
       setStats({ total: total || 0, today: today || 0, companies: uniqueCos })
+
+      // plan quota (super-admin editable)
+      const { data: planRows } = await supabase
+        .from('plan_limits')
+        .select('plan, display_name, monthly_lead_quota')
+        .order('monthly_lead_quota', { ascending: true })
+      setQuotas(planRows || [])
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -71,6 +80,23 @@ export default function Distribution({ theme }) {
     finally { setSaving(false) }
   }
 
+  async function updateQuota(plan, value) {
+    const v = value === '' ? '' : Math.max(0, parseInt(value) || 0)
+    setQuotas(prev => prev.map(q => q.plan === plan ? { ...q, monthly_lead_quota: v } : q))
+  }
+  async function saveQuota(plan) {
+    const row = quotas.find(q => q.plan === plan)
+    if (!row) return
+    const v = parseInt(row.monthly_lead_quota) || 0
+    setQuotaSaving(plan)
+    try {
+      await supabase.from('plan_limits').update({ monthly_lead_quota: v }).eq('plan', plan)
+      setQuotas(prev => prev.map(q => q.plan === plan ? { ...q, monthly_lead_quota: v } : q))
+      flash(`${row.display_name || plan} quota saved`)
+    } catch (e) { console.error(e); flash('Save failed') }
+    finally { setQuotaSaving(null) }
+  }
+
   const isDark = theme === 'dark'
   const bg       = isDark ? '#0f1623' : '#f7f9fc'
   const card     = isDark ? '#161f2e' : '#ffffff'
@@ -78,6 +104,13 @@ export default function Distribution({ theme }) {
   const text     = isDark ? '#e8eef7' : '#1a2332'
   const muted    = isDark ? '#8a98ad' : '#6b7787'
   const accent   = '#0099cc'
+
+  const planMeta = {
+    free:     { color:'#6b7787', bg:isDark?'#1c2433':'#f1f5f9' },
+    silver:   { color:'#5b6b8a', bg:isDark?'#1c2840':'#eef2f9' },
+    gold:     { color:'#b8860b', bg:isDark?'#2a2410':'#fef9ed' },
+    platinum: { color:'#7c3aed', bg:isDark?'#241c3a':'#f3effe' },
+  }
 
   const statusColors = {
     assigned:    { bg:'#e0f9ff', color:'#0077aa' },
@@ -209,8 +242,8 @@ export default function Distribution({ theme }) {
             {/* Ranking */}
             <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', margin:'18px 0 8px', fontWeight:700 }}>Ranking Order (who gets it first)</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:4 }}>
-              {['Plan tier ↑','Trust score ↑','Rating ↑','Fair rotation'].map((r,i) => (
-                <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i<3?'#e0f9ff':bg, color: i<3?'#0077aa':muted, border:`1px solid ${i<3?'#b3d9f0':border}` }}>{r}</span>
+              {['1 · Fewest leads first (fair)','2 · Plan tier','3 · Trust score','4 · Rating'].map((r,i) => (
+                <span key={r} style={{ fontSize:12, padding:'5px 12px', borderRadius:99, background: i===0?'#d1fae5':'#e0f9ff', color: i===0?'#065f46':'#0077aa', border:`1px solid ${i===0?'#a7f3d0':'#b3d9f0'}` }}>{r}</span>
               ))}
             </div>
 
@@ -221,6 +254,47 @@ export default function Distribution({ theme }) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ===== Monthly Lead Quota per Plan (super-admin) ===== */}
+      <div style={{ marginTop:20 }}>
+        <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8, fontWeight:700 }}>Monthly Lead Quota per Plan</div>
+        <div style={{ background:card, border:`1px solid ${border}`, borderRadius:12, padding:'16px 18px' }}>
+          <p style={{ fontSize:12.5, color:muted, margin:'0 0 14px' }}>
+            Max leads each plan receives per calendar month. Resets automatically on the 1st. The distribution engine skips a company once its plan quota is reached.
+          </p>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12 }}>
+            {quotas.length === 0 ? (
+              <div style={{ fontSize:13, color:muted }}>No plans found in plan_limits.</div>
+            ) : quotas.map(q => {
+              const pm = planMeta[q.plan] || planMeta.free
+              return (
+                <div key={q.plan} style={{ border:`1px solid ${border}`, borderRadius:10, padding:'13px 14px', background:bg }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                    <span style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.03em', color:pm.color, background:pm.bg, padding:'3px 10px', borderRadius:99 }}>
+                      {q.display_name || q.plan}
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <input
+                      type="number" min={0}
+                      value={q.monthly_lead_quota ?? ''}
+                      onChange={e => updateQuota(q.plan, e.target.value)}
+                      style={{ width:70, padding:'8px', textAlign:'center', fontSize:16, fontWeight:700, color:accent, background:card, border:`1px solid ${border}`, borderRadius:8, outline:'none' }} />
+                    <span style={{ fontSize:12, color:muted }}>leads / month</span>
+                    <div style={{ flex:1 }} />
+                    <button
+                      onClick={() => saveQuota(q.plan)}
+                      disabled={quotaSaving === q.plan}
+                      style={{ fontSize:12, fontWeight:600, color:'#fff', background:accent, border:'none', borderRadius:7, padding:'7px 13px', cursor:'pointer', opacity: quotaSaving===q.plan?0.6:1 }}>
+                      {quotaSaving === q.plan ? '...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Recent distributions */}
