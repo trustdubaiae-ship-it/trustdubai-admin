@@ -5,7 +5,7 @@ import { supabase } from '../supabase'
 function AnimatedNumber({ value, decimals = 0, duration = 900 }) {
   const [display, setDisplay] = useState(0)
   useEffect(() => {
-    let start = 0, raf
+    let raf
     const target = parseFloat(value) || 0
     const t0 = performance.now()
     const step = (t) => {
@@ -72,7 +72,7 @@ function DualLineChart({ series, color1, color2, isDark, height = 180 }) {
   const lineB = series.map((s,i)=>`${x(i)},${yb(s.b)}`).join(' ')
   const areaA = `0,${h} ${lineA} ${w},${h}`
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+    <svg width="100%" height={height} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display:'block' }}>
       <defs><linearGradient id="lcA" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color1} stopOpacity="0.18"/><stop offset="100%" stopColor={color1} stopOpacity="0"/></linearGradient></defs>
       {[0,0.5,1].map(f => <line key={f} x1="0" y1={h*f} x2={w} y2={h*f} stroke={isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.05)'} strokeWidth="1"/>)}
       <polygon points={areaA} fill="url(#lcA)"/>
@@ -120,12 +120,11 @@ function timeAgo(d) {
 export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) {
   const isDark = theme !== 'light'  // default dark (mockup is dark)
   const adminName = adminData?.name || adminData?.full_name || 'Admin'
-  const roleLabel = (adminData?.role || 'admin').replace('_',' ').replace(/\b\w/g, c => c.toUpperCase())
 
+  // vw only used for chart numeric sizing (heights/donut/sparkline). Layout = pure CSS media queries.
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280)
   useEffect(() => { const r = () => setVw(window.innerWidth); window.addEventListener('resize', r); return () => window.removeEventListener('resize', r) }, [])
   const mobile = vw < 768
-  const tablet = vw >= 768 && vw < 1200
 
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -152,8 +151,6 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
     setLoading(true)
     try {
       const now = new Date()
-      const d30 = new Date(now.getTime() - 30*864e5).toISOString()
-      const d60 = new Date(now.getTime() - 60*864e5).toISOString()
       const iso = (n) => new Date(now.getTime() - n*864e5).toISOString()
 
       const [
@@ -211,7 +208,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       }
       setReviewSeries(rs)
 
-      // category donut (companies grouped by category, top 6 + others)
+      // category donut (companies grouped by category, top 5 + others)
       const catMap = {}
       ;(catRows||[]).forEach(c => { const k = c.category||'Other'; catMap[k]=(catMap[k]||0)+1 })
       const sortedCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1])
@@ -243,7 +240,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       const genArr = Object.entries(genMap).map(([name,value])=>({name,value}))
       setDemo({ nationality:natArr, gender:genArr })
 
-      // activity feed — merge recent companies + reviews + enquiries
+      // activity feed — merge recent companies + reviews
       const feed = []
       ;(recentRev||[]).forEach(r => feed.push({ type:'review', icon:'ti-star', color:'#f59e0b', text:`New review for "${r.companies?.name||'a business'}"`, time:r.created_at }))
       ;(coRows||[]).slice(-4).forEach(c => feed.push({ type:'biz', icon:'ti-building-store', color:'#22c55e', text:`New business registered`, time:c.created_at }))
@@ -280,13 +277,12 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
     bar:    isDark ? 'rgba(255,255,255,0.06)' : '#eef2f7',
     green:'#22c55e', blue:'#3b82f6', purple:'#a855f7', gold:'#f59e0b', cyan:'#06b6d4', pink:'#ec4899', red:'#ef4444',
   }
-  const cardStyle = { background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'16px 18px', boxShadow:C.shadow }
+  const cardStyle = { background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'16px 18px', boxShadow:C.shadow, minWidth:0 }
   const H = ({ children, right }) => (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, gap:8 }}>
       <span style={{ fontSize:14, fontWeight:700, color:C.text }}>{children}</span>{right}
     </div>
   )
-  const grid = (m, t, d) => ({ display:'grid', gridTemplateColumns: mobile ? m : tablet ? t : d, gap:14 })
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'80vh' }}>
@@ -303,24 +299,25 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
     { label:'Total Businesses', value:stats.companies,  icon:'ti-building-store', color:C.blue,   delta:delta.companies,  spark:spark.companies,  page:'companies' },
     { label:'Total Users',      value:stats.customers,  icon:'ti-users',          color:C.purple, delta:delta.customers,  spark:spark.customers,  page:'users' },
     { label:'Avg. Rating',      value:stats.avgRating,  icon:'ti-star-filled',    color:C.gold,   delta:delta.rating,     spark:spark.rating,     isRating:true },
-    { label:'Enquiries',        value:stats.enquiries,  icon:'ti-headset',        color:C.cyan,   delta:delta.enquiries,  spark:spark.enquiries,  page:'enquiries' },
+    { label:'Enquiries',        value:stats.enquiries,  icon:'ti-headset',        color:C.cyan,   delta:delta.enquiries,  spark:spark.enquiries,  page:'leads' },
   ]
 
   const ALERTS = [
     { label:'Pending Reviews',   value:stats.pendingReviews,  icon:'ti-clock',          color:C.gold,  page:'reviews' },
     { label:'Pending Businesses',value:stats.pendingBiz,      icon:'ti-building',       color:C.blue,  page:'applications' },
     { label:'Reported Reviews',  value:stats.reportedReviews, icon:'ti-flag',           color:C.red,   page:'reviews' },
-    { label:'Unread Enquiries',  value:stats.unreadEnquiries, icon:'ti-message',        color:C.purple,page:'enquiries' },
+    { label:'Unread Enquiries',  value:stats.unreadEnquiries, icon:'ti-message',        color:C.purple,page:'leads' },
   ]
 
   const fmtPct = (p) => `${p>=0?'+':''}${p.toFixed(1)}%`
 
   return (
-    <div style={{ color:C.text, maxWidth:1400 }}>
+    <div className="cc-root" style={{ color:C.text, width:'100%', maxWidth:1500, margin:'0 auto' }}>
+      <style>{CC_CSS}</style>
 
       {/* HEADER */}
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
-        <div>
+        <div style={{ minWidth:0 }}>
           <h1 style={{ fontSize: mobile?20:24, fontWeight:800, color:C.text, margin:0 }}>Welcome back, {adminName}! 👋</h1>
           <p style={{ fontSize:13, color:C.text2, marginTop:4 }}>Here's what's happening with your platform today.</p>
         </div>
@@ -336,7 +333,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       </div>
 
       {/* 5 STAT CARDS */}
-      <div style={{ ...grid('repeat(2,1fr)','repeat(3,1fr)','repeat(5,1fr)'), marginBottom:14 }}>
+      <div className="cc-grid-stats" style={{ marginBottom:14 }}>
         {STAT_CARDS.map((s,i) => (
           <div key={i} onClick={()=> s.page && setPage && setPage(s.page)}
             style={{ ...cardStyle, cursor: s.page?'pointer':'default', transition:'all .15s' }}
@@ -344,7 +341,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
             onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform='none' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
               <span style={{ fontSize:12, color:C.text2, fontWeight:500 }}>{s.label}</span>
-              <div style={{ width:34, height:34, borderRadius:10, background:s.color+'1e', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <div style={{ width:34, height:34, borderRadius:10, background:s.color+'1e', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <i className={`ti ${s.icon}`} style={{ fontSize:17, color:s.color }}/>
               </div>
             </div>
@@ -354,7 +351,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
               </span>
               {s.isRating && <span style={{ color:C.gold, fontSize:13 }}>{'★'.repeat(Math.round(parseFloat(s.value)))}</span>}
             </div>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
               {!s.isRating ? (
                 <span style={{ fontSize:11, fontWeight:600, color: s.delta>=0?C.green:C.red, display:'flex', alignItems:'center', gap:2 }}>
                   <i className={`ti ${s.delta>=0?'ti-trending-up':'ti-trending-down'}`} style={{ fontSize:12 }}/>
@@ -368,9 +365,9 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       </div>
 
       {/* ROW 2: Reviews chart | Categories donut | Recent reviews */}
-      <div style={{ ...grid('1fr','1fr 1fr','1.5fr 1fr 1fr'), marginBottom:14 }}>
+      <div className="cc-grid-row2" style={{ marginBottom:14 }}>
         {/* Reviews & Ratings Overview */}
-        <div style={{ ...cardStyle, gridColumn: tablet ? 'span 2' : 'auto' }}>
+        <div className="cc-row2-main" style={cardStyle}>
           <H right={<div style={{ display:'flex', gap:12, fontSize:11 }}>
             <span style={{ display:'flex', alignItems:'center', gap:5, color:C.text2 }}><span style={{ width:9, height:9, borderRadius:'50%', background:C.green }}/>Reviews</span>
             <span style={{ display:'flex', alignItems:'center', gap:5, color:C.text2 }}><span style={{ width:9, height:9, borderRadius:'50%', background:C.purple }}/>Ratings</span>
@@ -430,11 +427,11 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       </div>
 
       {/* ROW 3: Businesses growth | Demographics | Activity feed */}
-      <div style={{ ...grid('1fr','1fr 1fr','1fr 1fr 1fr'), marginBottom:14 }}>
+      <div className="cc-grid-row3" style={{ marginBottom:14 }}>
         {/* Businesses Growth */}
         <div style={cardStyle}>
           <H right={<span style={{ fontSize:10, color:C.text3, background:C.row, padding:'3px 10px', borderRadius:20, border:`1px solid ${C.border}` }}>6 months</span>}>Businesses Growth</H>
-          <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:10 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:10, flexWrap:'wrap' }}>
             <span style={{ fontSize:24, fontWeight:800, color:C.text }}><AnimatedNumber value={stats.companies}/></span>
             <span style={{ fontSize:11, color:C.text3 }}>total businesses</span>
             <span style={{ fontSize:11, fontWeight:600, color: delta.companies>=0?C.green:C.red, marginLeft:'auto' }}>{fmtPct(delta.companies)}</span>
@@ -498,22 +495,22 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       </div>
 
       {/* BOTTOM: 4 alert cards */}
-      <div style={grid('repeat(2,1fr)','repeat(2,1fr)','repeat(4,1fr)')}>
+      <div className="cc-grid-alerts">
         {ALERTS.map((a,i) => (
           <div key={i} onClick={()=>setPage&&setPage(a.page)}
-            style={{ ...cardStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', borderColor:a.color+'33', transition:'all .15s' }}
+            style={{ ...cardStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, borderColor:a.color+'33', transition:'all .15s' }}
             onMouseEnter={e=>{ e.currentTarget.style.borderColor=a.color+'88'; e.currentTarget.style.transform='translateY(-2px)' }}
             onMouseLeave={e=>{ e.currentTarget.style.borderColor=a.color+'33'; e.currentTarget.style.transform='none' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-              <div style={{ width:42, height:42, borderRadius:11, background:a.color+'1e', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:11, minWidth:0 }}>
+              <div style={{ width:42, height:42, borderRadius:11, background:a.color+'1e', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <i className={`ti ${a.icon}`} style={{ fontSize:19, color:a.color }}/>
               </div>
-              <div>
+              <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:22, fontWeight:800, color:C.text, lineHeight:1 }}><AnimatedNumber value={a.value}/></div>
                 <div style={{ fontSize:11, color:C.text2, marginTop:3 }}>{a.label}</div>
               </div>
             </div>
-            <span style={{ fontSize:11, color:a.color, fontWeight:600, whiteSpace:'nowrap' }}>View All →</span>
+            <span style={{ fontSize:11, color:a.color, fontWeight:600, whiteSpace:'nowrap', flexShrink:0 }}>View All →</span>
           </div>
         ))}
       </div>
@@ -521,3 +518,47 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
     </div>
   )
 }
+
+/* ====================== RESPONSIVE LAYOUT (CSS) ======================
+   Pure CSS media queries — fixes resolution across phone/tablet/iPad/
+   laptop/desktop/big PC. Data logic above is untouched.
+   ==================================================================== */
+const CC_CSS = `
+.cc-root *{box-sizing:border-box;}
+.cc-grid-stats{display:grid;gap:14px;grid-template-columns:repeat(5,1fr);}
+.cc-grid-row2{display:grid;gap:14px;grid-template-columns:1.6fr 1fr 1fr;}
+.cc-grid-row3{display:grid;gap:14px;grid-template-columns:repeat(3,1fr);}
+.cc-grid-alerts{display:grid;gap:14px;grid-template-columns:repeat(4,1fr);}
+.cc-grid-stats>*,.cc-grid-row2>*,.cc-grid-row3>*,.cc-grid-alerts>*{min-width:0;}
+
+/* laptop / small desktop */
+@media (max-width:1280px){
+  .cc-grid-stats{grid-template-columns:repeat(3,1fr);}
+  .cc-grid-row2{grid-template-columns:1fr 1fr;}
+  .cc-row2-main{grid-column:span 2;}
+  .cc-grid-row3{grid-template-columns:repeat(2,1fr);}
+  .cc-grid-alerts{grid-template-columns:repeat(2,1fr);}
+}
+/* tablet / iPad portrait */
+@media (max-width:900px){
+  .cc-grid-row3{grid-template-columns:1fr;}
+}
+/* large phone / small tablet */
+@media (max-width:768px){
+  .cc-grid-stats{grid-template-columns:repeat(2,1fr);}
+  .cc-grid-row2{grid-template-columns:1fr;}
+  .cc-row2-main{grid-column:auto;}
+}
+/* phone */
+@media (max-width:480px){
+  .cc-grid-alerts{grid-template-columns:1fr;}
+}
+/* small phone */
+@media (max-width:380px){
+  .cc-grid-stats{grid-template-columns:1fr;}
+}
+/* big PC — keep cards from stretching too wide */
+@media (min-width:1700px){
+  .cc-grid-stats{gap:16px;}
+}
+`
