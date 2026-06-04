@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import RevenueEngine from './pages/RevenueEngine'
 import Companies from './pages/Companies'
 import Reviews from './pages/Reviews'
 import Categories from './pages/Categories'
@@ -37,7 +38,7 @@ const SAFE_TOP = 'env(safe-area-inset-top)'
 
 // All valid page keys (used to validate the URL hash on load)
 const VALID_PAGES = new Set([
-  'dashboard','inbox','companies','reviews','leads','lead_forms','distribution',
+  'dashboard','revenue_engine','inbox','companies','reviews','leads','lead_forms','distribution',
   'categories','employees','plans','plan_features','bulk','team','team_verification',
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
@@ -228,6 +229,7 @@ export default function App() {
         minWidth:0,
       }}>
         {page === 'dashboard'         && <Dashboard setPage={goPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
+        {page === 'revenue_engine'    && <RevenueEngine setPage={goPage} theme={theme} adminData={adminData} />}
         {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
