@@ -11,6 +11,7 @@ import Employees from './pages/Employees'
 import BulkUpload from './pages/BulkUpload'
 import Plans from './pages/Plans'
 import PlanFeatures from './pages/PlanFeatures'
+import SubscriptionManager from './pages/SubscriptionManager'
 import Team from './pages/Team'
 import TeamVerification from './pages/TeamVerification'
 import DocumentVerification from './pages/DocumentVerification'
@@ -40,7 +41,7 @@ const SAFE_TOP = 'env(safe-area-inset-top)'
 // All valid page keys (used to validate the URL hash on load)
 const VALID_PAGES = new Set([
   'dashboard','control_wall','revenue_engine','inbox','companies','reviews','leads','lead_forms','distribution',
-  'categories','employees','plans','plan_features','bulk','team','team_verification',
+  'categories','employees','plans','plan_features','subscription','bulk','team','team_verification',
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
   'notifications','sponsor_slots','settings','badges_manager',
@@ -246,6 +247,7 @@ export default function App() {
         {page === 'employees'         && canAccess('manage_employees')  && <Employees />}
         {page === 'plans'             && canAccess('manage_plans')      && <Plans />}
         {page === 'plan_features'     && isSuperAdmin && <PlanFeatures />}
+        {page === 'subscription'      && isSuperAdmin && <SubscriptionManager theme={theme} adminData={adminData} />}
         {page === 'bulk'              && canAccess('bulk_upload')       && <BulkUpload />}
         {page === 'team'              && isSuperAdmin && <Team />}
         {page === 'team_verification' && <TeamVerification theme={theme} adminData={adminData} />}
