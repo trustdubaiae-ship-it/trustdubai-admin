@@ -23,21 +23,26 @@ export default function SubscriptionManager({ theme, adminData }) {
   const [plans, setPlans] = useState([])         // plans
   const [curKey, setCurKey] = useState(null)     // selected plan_key
 
+  const [addons, setAddons] = useState([])       // addon_services
+  const [companies, setCompanies] = useState([]) // companies (lite)
+  const [coSearch, setCoSearch] = useState('')
+  const [coId, setCoId] = useState(null)         // selected company id
+
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     try {
-      const [{ data: fr }, { data: pl }] = await Promise.all([
+      const [{ data: fr }, { data: pl }, { data: ad }, { data: co }] = await Promise.all([
         supabase.from('feature_registry').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('plans').select('*').order('sort_order'),
+        supabase.from('addon_services').select('*').order('sort_order'),
+        supabase.from('companies').select('id,name,plan,plan_expires_at,addons,overrides,logo_url,is_verified').order('name'),
       ])
       setFeatures(fr || [])
-      setPlans((pl || []).map(p => ({
-        ...p,
-        limits: p.limits || {},
-        rights: p.rights || {},
-      })))
+      setPlans((pl || []).map(p => ({ ...p, limits: p.limits || {}, rights: p.rights || {} })))
+      setAddons((ad || []).map(a => ({ ...a, unlocks: a.unlocks || [] })))
+      setCompanies((co || []).map(c => ({ ...c, addons: c.addons || {}, overrides: c.overrides || {} })))
       if (pl && pl.length) setCurKey(prev => prev || pl[0].plan_key)
     } catch (e) { console.error('SubMgr load', e) }
     finally { setLoading(false) }
@@ -78,6 +83,56 @@ export default function SubscriptionManager({ theme, adminData }) {
   }
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(''), 2200) }
+
+  /* ---------- Tab 2: Add-on Services ---------- */
+  function patchAddon(key, patch) {
+    setAddons(as => as.map(a => a.addon_key === key ? { ...a, ...patch } : a))
+  }
+  async function saveAddon(a) {
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('addon_services').update({
+        name: a.name,
+        price: Number(a.price) || 0,
+        billing: a.billing || 'monthly',
+        description: a.description || '',
+        is_active: !!a.is_active,
+      }).eq('addon_key', a.addon_key)
+      if (error) throw error
+      showToast(a.name + ' saved ✓')
+    } catch (e) { console.error(e); showToast('Save failed — ' + (e.message || 'error')) }
+    finally { setSaving(false) }
+  }
+
+  /* ---------- Tab 3: Company Manager ---------- */
+  const company = useMemo(() => companies.find(c => c.id === coId) || null, [companies, coId])
+  function patchCompany(patch) {
+    setCompanies(cs => cs.map(c => c.id === coId ? { ...c, ...patch } : c))
+  }
+  function toggleCompanyAddon(key) {
+    if (!company) return
+    patchCompany({ addons: { ...company.addons, [key]: !company.addons[key] } })
+  }
+  function setOverride(key, val) {
+    if (!company) return
+    patchCompany({ overrides: { ...company.overrides, [key]: val } })
+  }
+  async function saveCompany() {
+    if (!company) return
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('companies').update({
+        plan: company.plan,
+        plan_expires_at: company.plan_expires_at || null,
+        addons: company.addons,
+        overrides: company.overrides,
+        is_verified: !!company.is_verified,
+      }).eq('id', company.id)
+      if (error) throw error
+      showToast(company.name + ' saved ✓')
+    } catch (e) { console.error(e); showToast('Save failed — ' + (e.message || 'error')) }
+    finally { setSaving(false) }
+  }
 
   /* ---------- theme ---------- */
   const C = {
@@ -145,14 +200,180 @@ export default function SubscriptionManager({ theme, adminData }) {
         ))}
       </div>
 
-      {tab !== 'plans' ? (
-        <div style={{ ...card, textAlign:'center', padding:'48px 20px', color:C.text2 }}>
-          <i className="ti ti-tool" style={{ fontSize:30, color:C.text3, display:'block', marginBottom:10 }}/>
-          <div style={{ fontSize:15, fontWeight:700, color:C.text, marginBottom:4 }}>{tab==='addons'?'Add-on Services':'Company Manager'}</div>
-          <div style={{ fontSize:13 }}>Building next — Plans & Rights is live.</div>
+      {/* ===================== TAB 2: ADD-ON SERVICES ===================== */}
+      {tab === 'addons' && (
+        addons.length === 0 ? (
+          <div style={{ ...card, color:C.text2 }}>No add-ons found. Run the Step 1 SQL seed.</div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:14 }}>
+            {addons.map(a => {
+              const unlockLabels = (a.unlocks || []).map(k => {
+                const f = features.find(ff => ff.feature_key === k); return f ? f.label : k
+              })
+              return (
+                <div key={a.addon_key} style={{ ...card }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+                    <div style={{ width:38, height:38, borderRadius:10, background:C.green+'18', color:C.green, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <i className={`ti ${a.icon || 'ti-puzzle'}`} style={{ fontSize:19 }}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <input value={a.name} onChange={e=>patchAddon(a.addon_key,{name:e.target.value})} style={{ ...input, fontWeight:700, padding:'5px 8px' }}/>
+                    </div>
+                    <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:C.text2, cursor:'pointer', flexShrink:0 }}>
+                      <input type="checkbox" checked={!!a.is_active} onChange={e=>patchAddon(a.addon_key,{is_active:e.target.checked})}/> Active
+                    </label>
+                  </div>
+
+                  <label style={lbl}>Description</label>
+                  <input value={a.description||''} onChange={e=>patchAddon(a.addon_key,{description:e.target.value})} style={{ ...input, marginBottom:10 }}/>
+
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+                    <div><label style={lbl}>Price (AED)</label><input type="number" value={a.price} onChange={e=>patchAddon(a.addon_key,{price:e.target.value})} style={input}/></div>
+                    <div><label style={lbl}>Billing</label>
+                      <select value={a.billing} onChange={e=>patchAddon(a.addon_key,{billing:e.target.value})} style={input}>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                        <option value="one_time">One-time</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize:11, color:C.text3, marginBottom:5 }}>Unlocks {unlockLabels.length} features:</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:14 }}>
+                    {unlockLabels.map((l,i)=>(
+                      <span key={i} style={{ fontSize:10.5, color:C.text2, background:C.card2, border:`1px solid ${C.border}`, borderRadius:6, padding:'2px 7px' }}>{l}</span>
+                    ))}
+                  </div>
+
+                  <button onClick={()=>saveAddon(a)} disabled={saving}
+                    style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:6, background:C.green, color:'#fff', border:'none', borderRadius:9, padding:'9px', fontSize:13, fontWeight:600, cursor:saving?'wait':'pointer', opacity:saving?0.7:1 }}>
+                    <i className="ti ti-check" style={{ fontSize:14 }}/> Save
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )
+      )}
+
+      {/* ===================== TAB 3: COMPANY MANAGER ===================== */}
+      {tab === 'companies' && (
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0,260px) minmax(0,1fr)', gap:16, alignItems:'start' }}>
+          {/* company list */}
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:7, background:C.card2, border:`1px solid ${C.border}`, borderRadius:9, padding:'7px 10px', marginBottom:8 }}>
+              <i className="ti ti-search" style={{ fontSize:14, color:C.text3 }}/>
+              <input placeholder="Search company..." value={coSearch} onChange={e=>setCoSearch(e.target.value)}
+                style={{ border:'none', background:'none', outline:'none', fontSize:12.5, width:'100%', color:C.text }}/>
+            </div>
+            <div style={{ maxHeight:'70vh', overflowY:'auto', display:'flex', flexDirection:'column', gap:3 }}>
+              {companies.filter(c => !coSearch || (c.name||'').toLowerCase().includes(coSearch.toLowerCase())).map(c => {
+                const on = c.id === coId
+                const ic = (c.name||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()
+                const pc = plans.find(p => p.plan_key === c.plan)
+                return (
+                  <div key={c.id} onClick={()=>setCoId(c.id)}
+                    style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 9px', borderRadius:9, cursor:'pointer',
+                      background: on?C.info:'transparent', border: on?`1px solid ${C.green}`:`1px solid transparent` }}>
+                    <span style={{ width:28, height:28, borderRadius:7, background:C.card2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:C.text2, flexShrink:0, overflow:'hidden' }}>
+                      {c.logo_url ? <img src={c.logo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/> : ic}
+                    </span>
+                    <span style={{ flex:1, minWidth:0, fontSize:12.5, color:C.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.name}</span>
+                    <span style={{ fontSize:9, fontWeight:700, padding:'1px 7px', borderRadius:99, textTransform:'capitalize', color:pc?.color||C.text3, background:(pc?.color||C.text3)+'1f' }}>{c.plan||'free'}</span>
+                  </div>
+                )
+              })}
+              {companies.length === 0 && <div style={{ fontSize:12.5, color:C.text3, padding:10 }}>No companies found.</div>}
+            </div>
+          </div>
+
+          {/* company panel */}
+          {!company ? (
+            <div style={{ ...card, textAlign:'center', padding:'48px 20px', color:C.text2 }}>
+              <i className="ti ti-building-store" style={{ fontSize:30, color:C.text3, display:'block', marginBottom:10 }}/>
+              <div style={{ fontSize:14, color:C.text2 }}>Select a company to manage its subscription.</div>
+            </div>
+          ) : (() => {
+            const planObj = plans.find(p => p.plan_key === company.plan)
+            const planPrice = Number(planObj?.price) || 0
+            const addonTotal = addons.reduce((s,a) => s + (company.addons[a.addon_key] && a.is_active ? (Number(a.price)||0) : 0), 0)
+            return (
+              <div style={{ ...card }}>
+                <div style={{ display:'flex', alignItems:'center', gap:11, marginBottom:16 }}>
+                  <span style={{ width:44, height:44, borderRadius:11, background:C.card2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700, color:C.text2, overflow:'hidden', flexShrink:0 }}>
+                    {company.logo_url ? <img src={company.logo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/> : (company.name||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()}
+                  </span>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:16, fontWeight:700, color:C.text }}>{company.name}</div>
+                    <div style={{ fontSize:11.5, color:C.text2 }}>Company ID #{company.id}</div>
+                  </div>
+                </div>
+
+                {/* plan */}
+                <div style={{ fontSize:11, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:8 }}>Plan</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:18 }}>
+                  <div><label style={lbl}>Current plan</label>
+                    <select value={company.plan||'free'} onChange={e=>patchCompany({plan:e.target.value})} style={{ ...input, textTransform:'capitalize' }}>
+                      {plans.map(p => <option key={p.plan_key} value={p.plan_key}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={lbl}>Expiry date</label>
+                    <input type="date" value={(company.plan_expires_at||'').slice(0,10)} onChange={e=>patchCompany({plan_expires_at:e.target.value})} style={input}/>
+                  </div>
+                </div>
+
+                {/* add-ons */}
+                <div style={{ fontSize:11, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Add-on services</div>
+                {addons.map(a => {
+                  const on = !!company.addons[a.addon_key]
+                  return (
+                    <div key={a.addon_key} onClick={()=>toggleCompanyAddon(a.addon_key)}
+                      style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 2px', borderBottom:`1px solid ${C.border}`, cursor:'pointer', opacity:a.is_active?1:0.5 }}>
+                      <i className={`ti ${a.icon||'ti-puzzle'}`} style={{ fontSize:17, color:C.text2 }}/>
+                      <span style={{ flex:1, fontSize:13, color:C.text }}>{a.name}{!a.is_active && <span style={{ fontSize:9.5, color:C.text3 }}> (inactive)</span>}</span>
+                      <span style={{ fontSize:11.5, color:C.text2 }}>AED {(Number(a.price)||0).toLocaleString()}/{a.billing==='one_time'?'once':a.billing==='yearly'?'yr':'mo'}</span>
+                      <span style={{ width:34, height:18, borderRadius:99, background:on?C.green:C.track, position:'relative', flexShrink:0, transition:'.15s' }}>
+                        <span style={{ position:'absolute', top:2, left:on?18:2, width:14, height:14, borderRadius:'50%', background:'#fff', transition:'.15s' }}/>
+                      </span>
+                    </div>
+                  )
+                })}
+
+                {/* overrides */}
+                <div style={{ fontSize:11, color:C.text3, textTransform:'uppercase', letterSpacing:'.05em', margin:'16px 0 8px' }}>Overrides</div>
+                <label style={{ display:'flex', alignItems:'center', gap:9, fontSize:13, color:C.text, marginBottom:10, cursor:'pointer' }}>
+                  <input type="checkbox" checked={!!company.is_verified} onChange={e=>patchCompany({is_verified:e.target.checked})}/> Verified badge (manual override)
+                </label>
+                <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:13, color:C.text, marginBottom:16 }}>
+                  Extra staff slots
+                  <input type="number" value={company.overrides.extra_staff ?? 0} onChange={e=>setOverride('extra_staff', parseInt(e.target.value)||0)} style={{ ...input, width:80 }}/>
+                  <span style={{ fontSize:11, color:C.text3 }}>beyond plan limit</span>
+                </div>
+
+                {/* billing */}
+                <div style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6 }}>
+                  <span style={{ fontSize:12.5, color:C.text2 }}>Monthly billing</span>
+                  <span style={{ fontSize:18, fontWeight:800, color:C.green }}>AED {(planPrice+addonTotal).toLocaleString()}<span style={{ fontSize:12, color:C.text2 }}>/mo</span></span>
+                </div>
+                <div style={{ fontSize:11, color:C.text3, marginBottom:16 }}>{planObj?.name||'Plan'} {planPrice.toLocaleString()} + add-ons {addonTotal.toLocaleString()}</div>
+
+                <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                  <button onClick={saveCompany} disabled={saving}
+                    style={{ display:'flex', alignItems:'center', gap:6, background:C.green, color:'#fff', border:'none', borderRadius:10, padding:'10px 18px', fontSize:14, fontWeight:600, cursor:saving?'wait':'pointer', opacity:saving?0.7:1 }}>
+                    <i className="ti ti-check" style={{ fontSize:15 }}/> {saving?'Saving…':'Save'}
+                  </button>
+                  {toast && <span style={{ fontSize:13, color: toast.includes('fail')?'#ef4444':C.green, fontWeight:600 }}>{toast}</span>}
+                </div>
+              </div>
+            )
+          })()}
         </div>
-      ) : !cur ? (
-        <div style={{ ...card, color:C.text2 }}>No plans found. Run the Step 1 SQL seed.</div>
+      )}
+
+      {/* ===================== TAB 1: PLANS & RIGHTS ===================== */}
+      {tab === 'plans' && (
+        !cur ? (
+          <div style={{ ...card, color:C.text2 }}>No plans found. Run the Step 1 SQL seed.</div>
       ) : (
         <>
           {/* plan selector */}
@@ -253,6 +474,7 @@ export default function SubscriptionManager({ theme, adminData }) {
             {toast && <span style={{ fontSize:13, color: toast.includes('fail')?'#ef4444':C.green, fontWeight:600 }}>{toast}</span>}
           </div>
         </>
+        )
       )}
     </div>
   )
