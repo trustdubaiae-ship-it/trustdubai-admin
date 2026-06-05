@@ -49,9 +49,9 @@ const VALID_PAGES = new Set([
 
 // Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
 function getHashPage() {
-  if (typeof window === 'undefined') return 'dashboard'
+  if (typeof window === 'undefined') return 'control_wall'
   const h = (window.location.hash || '').replace(/^#/, '').trim()
-  return VALID_PAGES.has(h) ? h : 'dashboard'
+  return VALID_PAGES.has(h) ? h : 'control_wall'
 }
 
 export default function App() {
@@ -167,11 +167,6 @@ export default function App() {
     </div>
   )
 
-  // Control Wall = full-screen standalone page (no sidebar/topbar)
-  if (page === 'control_wall') {
-    return <ControlWall onBack={() => goPage('dashboard')} theme={theme} />
-  }
-
   const TOPBAR_H = 52
 
   return (
@@ -235,6 +230,7 @@ export default function App() {
         maxWidth:'100%',
         minWidth:0,
       }}>
+        {page === 'control_wall'      && <ControlWall onBack={() => goPage('dashboard')} theme={theme} embedded />}
         {page === 'dashboard'         && <Dashboard setPage={goPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
         {page === 'revenue_engine'    && <RevenueEngine setPage={goPage} theme={theme} adminData={adminData} />}
         {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
