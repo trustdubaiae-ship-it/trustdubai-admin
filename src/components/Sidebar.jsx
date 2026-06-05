@@ -40,6 +40,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { id: 'distribution',  icon: 'ti-route',             label: 'Distribution', show: isSuperAdmin },
 
     { section: 'REVENUE' },
+    { id: 'subscription',  icon: 'ti-adjustments-dollar', label: 'Subscription Manager', show: isSuperAdmin },
     { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
     { id: 'sponsor_slots', icon: 'ti-ad-2',              label: 'Sponsor Slots',      show: isSuperAdmin },
     { id: 'accounts',      icon: 'ti-report-money',      label: 'Revenue & Accounts', show: isAccounts || isSuperAdmin },
