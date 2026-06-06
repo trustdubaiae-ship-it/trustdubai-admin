@@ -1,5 +1,5 @@
 // trustdubai-admin/src/pages/Analytics.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 
 /* ============================================================================
@@ -7,14 +7,16 @@ import { supabase } from '../supabase'
    AI-Powered Traffic Intelligence Platform
    Real data: profile_views_log, lead_form_views, sponsor_analytics, companies
    Props: setPage, theme, adminData
+   Fullscreen = zoom-to-fit (whole dashboard scales to fit one screen, no scroll)
 ============================================================================ */
 
 export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const isDark = theme !== 'light'
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1400)
   const [loading, setLoading] = useState(true)
-  const [range, setRange] = useState(30) // 7 | 30 | 90
+  const [range, setRange] = useState(30)
   const [isFull, setIsFull] = useState(false)
+  const [scale, setScale] = useState(1)
   const rootRef = useRef(null)
   const contentRef = useRef(null)
 
@@ -42,6 +44,28 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }, [])
 
   useEffect(() => { loadAll() }, [range])
+
+  // Fullscreen zoom-to-fit: scale the whole dashboard so it fits one screen (no scroll, nothing cut)
+  useLayoutEffect(() => {
+    if (!isFull) { setScale(1); return }
+    const calc = () => {
+      const el = contentRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      const availH = window.innerHeight - top - 16
+      const availW = el.parentElement ? el.parentElement.clientWidth : window.innerWidth
+      const h = el.scrollHeight
+      const w = el.scrollWidth
+      if (h <= 0 || w <= 0) return
+      const s = Math.min(availH / h, availW / w)
+      setScale(Math.max(0.4, Math.min(1.3, s)))
+    }
+    calc()
+    const t1 = setTimeout(calc, 80)
+    const t2 = setTimeout(calc, 350)
+    window.addEventListener('resize', calc)
+    return () => { window.removeEventListener('resize', calc); clearTimeout(t1); clearTimeout(t2) }
+  }, [isFull, vw, loading, trend, feed, topCos, countries, devices, leadCats, sources, sponsor])
 
   function toggleFull() {
     const el = rootRef.current
@@ -79,13 +103,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const prevSince = new Date(now.getTime() - range * 2 * 864e5).toISOString()
 
       const [
-        { data: pv },
-        { data: pvPrev },
-        { data: lfv },
-        { data: lfvPrev },
-        { data: spon },
-        { data: sponPrev },
-        { data: cos },
+        { data: pv }, { data: pvPrev }, { data: lfv }, { data: lfvPrev },
+        { data: spon }, { data: sponPrev }, { data: cos },
       ] = await Promise.all([
         supabase.from('profile_views_log').select('company_id, visited_at, visitor_ip, user_agent, country').gte('visited_at', since).order('visited_at', { ascending: false }),
         supabase.from('profile_views_log').select('id, visited_at, visitor_ip').gte('visited_at', prevSince).lt('visited_at', since),
@@ -118,8 +137,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       })
 
       const buckets = {}
-      const days = range
-      for (let i = days - 1; i >= 0; i--) {
+      for (let i = range - 1; i >= 0; i--) {
         const d = new Date(now.getTime() - i * 864e5)
         buckets[d.toISOString().slice(0, 10)] = 0
       }
@@ -167,7 +185,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       setSponsor({ imp: sImpAll, clicks: sClick, leads: sLead })
 
       const acts = []
-      views.slice(0, 12).forEach(v => acts.push({
+      views.slice(0, 14).forEach(v => acts.push({
         t: v.visited_at, country: v.country || 'Unknown', flag: FLAGS[v.country] || '🌐',
         action: `Viewed ${coMap[v.company_id] || 'a company'} profile`,
         path: '/company/' + ((coMap[v.company_id] || 'profile').toLowerCase().replace(/\s+/g, '-')), icon: 'eye',
@@ -182,7 +200,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         path: '/sponsor/' + (s.source_page || 'home'), icon: 'click',
       }))
       acts.sort((a, b) => new Date(b.t) - new Date(a.t))
-      setFeed(acts.slice(0, 10))
+      setFeed(acts.slice(0, 12))
 
       setRealtime(views.filter(v => (Date.now() - new Date(v.visited_at).getTime()) < 30 * 60 * 1000).length)
 
@@ -202,13 +220,13 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }
 
   const C = isDark ? {
-    bg: '#080a14', panel: 'rgba(18,22,40,0.7)', panelSolid: '#10131f',
+    bg: '#080a14', panel: 'rgba(18,22,40,0.7)',
     line: 'rgba(255,255,255,0.07)', soft: 'rgba(255,255,255,0.03)',
     t1: '#eef2fb', t2: '#9aa5bd', t3: '#5e6a83',
     cyan: '#22d3ee', purple: '#a855f7', indigo: '#6366f1', green: '#10b981', amber: '#f59e0b', pink: '#ec4899',
     glow: '0 0 0 1px rgba(255,255,255,0.04), 0 8px 40px rgba(34,211,238,0.06)',
   } : {
-    bg: '#eef2f8', panel: '#ffffff', panelSolid: '#ffffff',
+    bg: '#eef2f8', panel: '#ffffff',
     line: '#e3e9f2', soft: '#f4f7fb',
     t1: '#0f1830', t2: '#56627a', t3: '#94a0b5',
     cyan: '#0891b2', purple: '#9333ea', indigo: '#4f46e5', green: '#059669', amber: '#d97706', pink: '#db2777',
@@ -241,7 +259,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     )
   }
 
-  function Donut({ data, size = 150, thickness = 22, center }) {
+  function Donut({ data, size = 150, thickness = 22 }) {
     const total = Math.max(1, data.reduce((s, d) => s + d.count, 0))
     const r = (size - thickness) / 2, cx = size / 2, cy = size / 2
     const circ = 2 * Math.PI * r
@@ -258,7 +276,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           offset += dash
           return el
         })}
-        {center}
       </svg>
     )
   }
@@ -306,15 +323,15 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
   function TrendChart() {
     const d = trend
-    if (!d.length) return <div style={{ height: 210 }} />
-    const W = 720, H = 210, pad = 28
+    if (!d.length) return <div style={{ height: 200 }} />
+    const W = 720, H = 200, pad = 28
     const max = Math.max(...d.map(x => x.v), 1)
     const stepX = (W - pad) / Math.max(1, d.length - 1)
     const pts = d.map((x, i) => `${pad + i * stepX},${H - 24 - (x.v / max) * (H - 50)}`).join(' ')
     const area = `${pad},${H - 24} ${pts} ${pad + (d.length - 1) * stepX},${H - 24}`
     const ticks = mobile ? 4 : 6
     return (
-      <svg width="100%" height={isFull ? '100%' : H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
         <defs>
           <linearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={C.cyan} stopOpacity="0.35" /><stop offset="100%" stopColor={C.cyan} stopOpacity="0" />
@@ -337,7 +354,221 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }
 
   const grid3 = mobile ? '1fr' : 'repeat(3, 1fr)'
-  const mainSplit = (mobile || tablet) ? '1fr' : '1.6fr 1fr'
+
+  // ===== render the dashboard content (used in both normal + fullscreen) =====
+  const dashboard = (
+    <>
+      {/* KPI ROW */}
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
+        <KpiCard label="Total Profile Views" value={kpi.views} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} />
+        <KpiCard label="Unique Visitors (IP)" value={kpi.unique} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} />
+        <KpiCard label="Lead Form Views" value={kpi.leadViews} chg={kpi.leadChg} color={C.indigo} icon="ti-forms" sparkData={trend.map(t => t.v)} />
+        <KpiCard label="Sponsor Impressions" value={kpi.sponsorImp} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} />
+      </div>
+
+      {/* MAIN | RIGHT RAIL */}
+      <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 340px', gap: 16, alignItems: 'start' }}>
+
+        {/* MAIN COLUMN */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <Panel glow>
+            <Title n="5" right={<span style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.t2 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 14, height: 3, background: C.cyan, borderRadius: 9 }} /> Views</span>
+            </span>}>Views Trend (Daily)</Title>
+            <TrendChart />
+          </Panel>
+
+          <Panel glow>
+            <Title n="6">Top Viewed Companies</Title>
+            {topCos.length === 0 ? <Empty C={C} text="No profile views yet in this period." /> : topCos.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < topCos.length - 1 ? 13 : 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: C.t3, width: 18 }}>{String(i + 1).padStart(2, '0')}</span>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: C.soft, border: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: C.t2, flexShrink: 0 }}>{c.name.slice(0, 2).toUpperCase()}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${c.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.purple},${C.indigo})`, borderRadius: 99 }} />
+                  </div>
+                </div>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t2, minWidth: 48, textAlign: 'right' }}>{c.views.toLocaleString()}</span>
+              </div>
+            ))}
+          </Panel>
+
+          {/* COUNTRY + DEVICE + LEAD CATS */}
+          <div style={{ display: 'grid', gridTemplateColumns: grid3, gap: 16 }}>
+            <Panel glow>
+              <Title n="7">Country Breakdown</Title>
+              {countries.length === 0 ? <Empty C={C} text="No country data yet." /> : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: 100, height: 100, flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, ${C.indigo}, ${C.cyan}33 60%, transparent 72%)`, filter: 'blur(2px)' }} />
+                    <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', border: `1px solid ${C.cyan}55`, boxShadow: `inset 0 0 22px ${C.cyan}33` }} />
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>🌍</div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    {countries.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                        <span style={{ fontSize: 13 }}>{c.flag}</span>
+                        <span style={{ fontSize: 12, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+
+            <Panel glow>
+              <Title n="8">Device Breakdown</Title>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <Donut data={devices} size={110} thickness={18} />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: C.t1 }}>{fmt(devices.reduce((s, d) => s + d.count, 0))}</span>
+                    <span style={{ fontSize: 9, color: C.t3 }}>views</span>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  {devices.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: C.t1, flex: 1 }}>{d.name}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{d.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel glow>
+              <Title n="9">Lead Forms by Category</Title>
+              {leadCats.length === 0 ? <Empty C={C} text="No lead-form views yet." /> : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flexShrink: 0 }}><Donut data={leadCats} size={110} thickness={18} /></div>
+                  <div style={{ flex: 1 }}>
+                    {leadCats.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11.5, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                        <span style={{ fontSize: 10, color: C.t3 }}>({c.count})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
+
+          {/* SOURCES + SPONSOR */}
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1.3fr', gap: 16 }}>
+            <Panel glow>
+              <Title n="10">Top Source Pages</Title>
+              {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
+                <div key={i} style={{ marginBottom: i < sources.length - 1 ? 11 : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{s.pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${s.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius: 99 }} />
+                  </div>
+                </div>
+              ))}
+            </Panel>
+
+            <Panel glow>
+              <Title n="11">Sponsor Performance</Title>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
+                {[
+                  { l: 'IMPRESSIONS', v: sponsor.imp, c: C.purple },
+                  { l: 'CLICKS', v: sponsor.clicks, c: C.cyan },
+                  { l: 'LEADS', v: sponsor.leads, c: C.green },
+                ].map((m, i) => (
+                  <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em' }}>{m.l}</div>
+                    <div style={{ fontSize: 19, fontWeight: 800, color: C.t1, marginTop: 3 }}>{m.v.toLocaleString()}</div>
+                    <div style={{ height: 3, background: m.c, borderRadius: 99, marginTop: 7, opacity: 0.7 }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em', marginBottom: 9 }}>CONVERSION FUNNEL</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(() => {
+                  const imp = Math.max(1, sponsor.imp)
+                  const stages = [
+                    { l: 'Impressions', v: sponsor.imp, sub: '100%', c: C.purple },
+                    { l: 'Clicks', v: sponsor.clicks, sub: Math.round((sponsor.clicks / imp) * 100) + '%', c: C.cyan },
+                    { l: 'Leads', v: sponsor.leads, sub: Math.round((sponsor.leads / imp) * 100) + '%', c: C.green },
+                  ]
+                  return stages.map((s, i) => (
+                    <div key={i} style={{ flex: 1, background: `linear-gradient(135deg,${s.c},${s.c}aa)`, borderRadius: 10, padding: '12px 10px', color: '#fff', opacity: isDark ? 0.92 : 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.95 }}>{s.l}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, marginTop: 3 }}>{s.v.toLocaleString()}</div>
+                      <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{s.sub}</div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </Panel>
+          </div>
+        </div>
+
+        {/* RIGHT RAIL */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <Panel glow style={{ background: isDark ? 'linear-gradient(160deg,rgba(168,85,247,0.12),rgba(34,211,238,0.06))' : C.panel }}>
+            <Title right={<i className="ti ti-brain" style={{ fontSize: 18, color: C.purple }} />}>
+              <span style={{ letterSpacing: '0.06em', fontSize: 12, color: C.t2, fontWeight: 800 }}>AI INSIGHTS</span>
+            </Title>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {insights.map((ins, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${[C.green, C.purple, C.cyan, C.amber][i % 4]}22`, border: `1px solid ${[C.green, C.purple, C.cyan, C.amber][i % 4]}55` }}>
+                    <i className={`ti ${iconMap[ins.icon] || 'ti-bulb'}`} style={{ fontSize: 13, color: [C.green, C.purple, C.cyan, C.amber][i % 4] }} />
+                  </div>
+                  <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{ins.text}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel glow>
+            <Title n="12" right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Visitors / Activity</Title>
+            <div className="an-scroll" style={{ maxHeight: 340, overflowY: 'auto' }}>
+              {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}` }}>
+                    <i className={`ti ${iconMap[a.icon]}`} style={{ fontSize: 13, color: C.cyan }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t1 }}>{a.flag} {a.country}</span>
+                      <span style={{ fontSize: 10, color: C.t3, whiteSpace: 'nowrap' }}>{timeAgo(a.t)}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.t2, marginTop: 1 }}>{a.action}</div>
+                    <div style={{ fontSize: 10, color: C.t3, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.path}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      {/* footer status */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 16, fontSize: 11, color: C.t2 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} /> All Systems Operational
+          <span style={{ color: C.t3, marginLeft: 8 }}>· {realtime} active in last 30 min</span>
+        </span>
+        <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
+      </div>
+    </>
+  )
 
   return (
     <div ref={rootRef} style={{ background: C.bg, minHeight: '100%', fontFamily: F, color: C.t1, padding: mobile ? 12 : 20, position: 'relative', ...(isFull ? { height: '100vh', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}) }}>
@@ -379,224 +610,15 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           <div style={{ width: 34, height: 34, border: `3px solid ${C.line}`, borderTopColor: C.cyan, borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
           Loading analytics…
         </div>
+      ) : isFull ? (
+        // FULLSCREEN: zoom-to-fit — whole dashboard scaled to fit one screen, no scroll, nothing cut
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+          <div ref={contentRef} style={{ width: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+            {dashboard}
+          </div>
+        </div>
       ) : (
-        <div style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden', width: '100%' } : { display: 'contents' }}>
-        <div ref={contentRef} style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14, width: '100%' } : { display: 'contents' }}>
-        <>
-          {/* KPI ROW */}
-          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16, flexShrink: 0 }}>
-            <KpiCard label="Total Profile Views" value={kpi.views} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} />
-            <KpiCard label="Unique Visitors (IP)" value={kpi.unique} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} />
-            <KpiCard label="Lead Form Views" value={kpi.leadViews} chg={kpi.leadChg} color={C.indigo} icon="ti-forms" sparkData={trend.map(t => t.v)} />
-            <KpiCard label="Sponsor Impressions" value={kpi.sponsorImp} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} />
-          </div>
-
-          {/* MAIN COLUMN  |  RIGHT RAIL (AI + Live feed, full height) */}
-          <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 340px', gap: 16, alignItems: 'stretch', ...(isFull ? { flex: 1, minHeight: 0 } : {}) }}>
-
-            {/* ===== MAIN COLUMN ===== */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, ...(isFull ? { minHeight: 0 } : {}) }}>
-              <Panel glow style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}}>
-                <Title n="5" right={<span style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.t2 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 14, height: 3, background: C.cyan, borderRadius: 9 }} /> Views</span>
-                </span>}>Views Trend (Daily)</Title>
-                <div style={isFull ? { flex: 1, minHeight: 0 } : {}}><TrendChart /></div>
-              </Panel>
-
-              <Panel glow>
-                <Title n="6">Top Viewed Companies</Title>
-                {topCos.length === 0 ? <Empty C={C} text="No profile views yet in this period." /> : topCos.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < topCos.length - 1 ? 13 : 0 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: C.t3, width: 18 }}>{String(i + 1).padStart(2, '0')}</span>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: C.soft, border: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: C.t2, flexShrink: 0 }}>{c.name.slice(0, 2).toUpperCase()}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
-                      </div>
-                      <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ width: `${c.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.purple},${C.indigo})`, borderRadius: 99 }} />
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t2, minWidth: 48, textAlign: 'right' }}>{c.views.toLocaleString()}</span>
-                  </div>
-                ))}
-              </Panel>
-
-              {/* COUNTRY + DEVICE + LEAD CATS (inside MAIN) */}
-              <div style={{ display: 'grid', gridTemplateColumns: grid3, gap: 16 }}>
-                <Panel glow>
-                  <Title n="7">Country Breakdown</Title>
-                  {countries.length === 0 ? <Empty C={C} text="No country data yet." /> : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                      <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
-                        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, ${C.indigo}, ${C.cyan}33 60%, transparent 72%)`, filter: 'blur(2px)' }} />
-                        <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', border: `1px solid ${C.cyan}55`, boxShadow: `inset 0 0 22px ${C.cyan}33` }} />
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>🌍</div>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 130 }}>
-                        {countries.map((c, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                            <span style={{ fontSize: 13 }}>{c.flag}</span>
-                            <span style={{ fontSize: 12, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Panel>
-
-                <Panel glow>
-                  <Title n="8">Device Breakdown</Title>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <Donut data={devices} size={120} thickness={20} />
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: C.t1 }}>{fmt(devices.reduce((s, d) => s + d.count, 0))}</span>
-                        <span style={{ fontSize: 9, color: C.t3 }}>views</span>
-                      </div>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      {devices.map((d, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-                          <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, color: C.t1, flex: 1 }}>{d.name}</span>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{d.pct}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </Panel>
-
-                <Panel glow>
-                  <Title n="9">Lead Forms by Category</Title>
-                  {leadCats.length === 0 ? <Empty C={C} text="No lead-form views yet." /> : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ flexShrink: 0 }}><Donut data={leadCats} size={120} thickness={20} /></div>
-                      <div style={{ flex: 1 }}>
-                        {leadCats.map((c, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-                            <span style={{ fontSize: 11.5, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                            <span style={{ fontSize: 11.5, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
-                            <span style={{ fontSize: 10, color: C.t3 }}>({c.count})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Panel>
-              </div>
-
-              {/* SOURCES + SPONSOR (inside MAIN) */}
-              <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1.3fr', gap: 16 }}>
-                <Panel glow>
-                  <Title n="10">Top Source Pages</Title>
-                  {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
-                    <div key={i} style={{ marginBottom: i < sources.length - 1 ? 11 : 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{s.pct}%</span>
-                      </div>
-                      <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ width: `${s.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius: 99 }} />
-                      </div>
-                    </div>
-                  ))}
-                </Panel>
-
-                <Panel glow>
-                  <Title n="11">Sponsor Performance</Title>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
-                    {[
-                      { l: 'IMPRESSIONS', v: sponsor.imp, c: C.purple },
-                      { l: 'CLICKS', v: sponsor.clicks, c: C.cyan },
-                      { l: 'LEADS', v: sponsor.leads, c: C.green },
-                    ].map((m, i) => (
-                      <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px' }}>
-                        <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em' }}>{m.l}</div>
-                        <div style={{ fontSize: 19, fontWeight: 800, color: C.t1, marginTop: 3 }}>{m.v.toLocaleString()}</div>
-                        <div style={{ height: 3, background: m.c, borderRadius: 99, marginTop: 7, opacity: 0.7 }} />
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em', marginBottom: 9 }}>CONVERSION FUNNEL</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {(() => {
-                      const imp = Math.max(1, sponsor.imp)
-                      const stages = [
-                        { l: 'Impressions', v: sponsor.imp, sub: '100%', c: C.purple },
-                        { l: 'Clicks', v: sponsor.clicks, sub: Math.round((sponsor.clicks / imp) * 100) + '%', c: C.cyan },
-                        { l: 'Leads', v: sponsor.leads, sub: Math.round((sponsor.leads / imp) * 100) + '%', c: C.green },
-                      ]
-                      return stages.map((s, i) => (
-                        <div key={i} style={{ flex: 1, background: `linear-gradient(135deg,${s.c},${s.c}aa)`, borderRadius: 10, padding: '12px 10px', color: '#fff', opacity: isDark ? 0.92 : 1 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.95 }}>{s.l}</div>
-                          <div style={{ fontSize: 16, fontWeight: 800, marginTop: 3 }}>{s.v.toLocaleString()}</div>
-                          <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{s.sub}</div>
-                        </div>
-                      ))
-                    })()}
-                  </div>
-                </Panel>
-              </div>
-            </div>
-            {/* ===== END MAIN COLUMN ===== */}
-
-            {/* ===== RIGHT RAIL: AI INSIGHTS + LIVE FEED (full height) ===== */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, ...(isFull ? { minHeight: 0 } : {}) }}>
-              <Panel glow style={{ background: isDark ? 'linear-gradient(160deg,rgba(168,85,247,0.12),rgba(34,211,238,0.06))' : C.panel }}>
-                <Title right={<i className="ti ti-brain" style={{ fontSize: 18, color: C.purple }} />}>
-                  <span style={{ letterSpacing: '0.06em', fontSize: 12, color: C.t2, fontWeight: 800 }}>AI INSIGHTS</span>
-                </Title>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-                  {insights.map((ins, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${[C.green, C.purple, C.cyan, C.amber][i % 4]}22`, border: `1px solid ${[C.green, C.purple, C.cyan, C.amber][i % 4]}55` }}>
-                        <i className={`ti ${iconMap[ins.icon] || 'ti-bulb'}`} style={{ fontSize: 13, color: [C.green, C.purple, C.cyan, C.amber][i % 4] }} />
-                      </div>
-                      <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{ins.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-
-              <Panel glow style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <Title n="12" right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Visitors / Activity</Title>
-                <div className="an-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}` }}>
-                        <i className={`ti ${iconMap[a.icon]}`} style={{ fontSize: 13, color: C.cyan }} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t1 }}>{a.flag} {a.country}</span>
-                          <span style={{ fontSize: 10, color: C.t3, whiteSpace: 'nowrap' }}>{timeAgo(a.t)}</span>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: C.t2, marginTop: 1 }}>{a.action}</div>
-                        <div style={{ fontSize: 10, color: C.t3, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.path}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </div>
-            {/* ===== END RIGHT RAIL ===== */}
-          </div>
-
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 18, fontSize: 11, color: C.t2 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} /> All Systems Operational
-              <span style={{ color: C.t3, marginLeft: 8 }}>· {realtime} active in last 30 min</span>
-            </span>
-            <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
-          </div>
-        </>
-        </div>
-        </div>
+        dashboard
       )}
     </div>
   )
