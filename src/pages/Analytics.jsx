@@ -1,448 +1,596 @@
+// trustdubai-admin/src/pages/Analytics.jsx
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 
-/* ============================== helpers ============================== */
-function AnimatedNumber({ value, prefix = '', suffix = '', duration = 900 }) {
-  const [display, setDisplay] = useState(0)
-  useEffect(() => {
-    let raf
-    const target = parseFloat(value) || 0
-    const t0 = performance.now()
-    const step = (t) => {
-      const p = Math.min((t - t0) / duration, 1)
-      const e = 1 - Math.pow(1 - p, 3)
-      setDisplay(target * e)
-      if (p < 1) raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [value])
-  return <span>{prefix}{Math.round(display).toLocaleString()}{suffix}</span>
-}
+/* ============================================================================
+   TrustDubai — Analytics Overview (Premium)
+   AI-Powered Traffic Intelligence Platform
+   Real data: profile_views_log, lead_form_views, sponsor_analytics, companies
+   Props: setPage, theme, adminData
+============================================================================ */
 
-function Sparkline({ data, color, width = 80, height = 28 }) {
-  if (!data || data.length < 2) return <svg width={width} height={height}><line x1="0" y1={height/2} x2={width} y2={height/2} stroke={color} strokeWidth="1.5" opacity="0.25" strokeDasharray="3,3"/></svg>
-  const max = Math.max(...data), min = Math.min(...data), range = max - min || 1
-  const pts = data.map((v,i) => `${(i/(data.length-1))*width},${height-((v-min)/range)*(height-6)-3}`).join(' ')
-  const lastY = height-((data[data.length-1]-min)/range)*(height-6)-3
-  const gid = 'aspk' + color.replace('#','')
-  return (
-    <svg width={width} height={height} style={{ overflow:'visible' }}>
-      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
-      <polygon points={`0,${height} ${pts} ${width},${height}`} fill={`url(#${gid})`}/>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx={width} cy={lastY} r="2.5" fill={color}/>
-    </svg>
-  )
-}
-
-function Donut({ segments, total, label, size = 140, isDark }) {
-  const r = size/2 - 16, cx = size/2, cy = size/2, circ = 2*Math.PI*r
-  let offset = 0
-  const sum = segments.reduce((s,x)=>s+x.value,0) || 1
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={isDark?'rgba(255,255,255,0.05)':'#eef2f7'} strokeWidth="13"/>
-      {segments.map((seg,i) => {
-        const dash = (seg.value/sum)*circ
-        const el = <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={seg.color} strokeWidth="13" strokeDasharray={`${dash} ${circ-dash}`} strokeDashoffset={-offset} transform={`rotate(-90 ${cx} ${cy})`}/>
-        offset += dash
-        return el
-      })}
-      <text x={cx} y={cy-3} textAnchor="middle" fontSize="18" fontWeight="700" fill={isDark?'#f1f5f9':'#0f172a'}>{total}</text>
-      <text x={cx} y={cy+14} textAnchor="middle" fontSize="9" fill={isDark?'#6b7280':'#94a3b8'}>{label}</text>
-    </svg>
-  )
-}
-
-function LineChart({ data, color, isDark, height = 170 }) {
-  if (!data || data.length < 2) return <div style={{ height, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:isDark?'#6b7280':'#94a3b8' }}>Not enough data yet</div>
-  const w = 1000, h = 220, pad = 8
-  const max = Math.max(...data, 1)
-  const x = i => (i/(data.length-1))*w
-  const y = v => h - (v/max)*(h-pad*2) - pad
-  const line = data.map((v,i)=>`${x(i)},${y(v)}`).join(' ')
-  const lastX = x(data.length-1), lastY = y(data[data.length-1])
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs><linearGradient id="aLine" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.2"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
-      {[0,0.5,1].map(f => <line key={f} x1="0" y1={h*f} x2={w} y2={h*f} stroke={isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.05)'} strokeWidth="1"/>)}
-      <polygon points={`0,${h} ${line} ${w},${h}`} fill="url(#aLine)"/>
-      <polyline points={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
-      <circle cx={lastX} cy={lastY} r="5" fill={color} stroke={isDark?'#141921':'#fff'} strokeWidth="2"/>
-    </svg>
-  )
-}
-
-function Clock({ isDark }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    const tick = () => { if (ref.current) ref.current.textContent = new Date().toLocaleTimeString('en-AE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' · GMT+4' }
-    tick(); const t = setInterval(tick,1000); return () => clearInterval(t)
-  }, [])
-  return <span ref={ref} style={{ fontSize:11, fontVariantNumeric:'tabular-nums' }}/>
-}
-
-function timeAgo(d) {
-  const s = Math.floor((Date.now() - new Date(d).getTime())/1000)
-  if (s < 60) return 'just now'
-  const m = Math.floor(s/60); if (m < 60) return `${m} min ago`
-  const h = Math.floor(m/60); if (h < 24) return `${h} hr ago`
-  const days = Math.floor(h/24); return `${days} day${days>1?'s':''} ago`
-}
-
-function deviceOf(ua) {
-  if (!ua) return 'Unknown'
-  const s = ua.toLowerCase()
-  if (/ipad|tablet/.test(s)) return 'Tablet'
-  if (/mobi|iphone/.test(s)) return 'Mobile'
-  if (/android/.test(s)) return /mobile/.test(s) ? 'Mobile' : 'Tablet'
-  if (/windows|macintosh|linux|cros/.test(s)) return 'Desktop'
-  return 'Other'
-}
-
-const DEVICE_COLOR = { Mobile:'#22c55e', Desktop:'#3b82f6', Tablet:'#a855f7', Other:'#94a3b8', Unknown:'#64748b' }
-const CAT_COLORS = ['#22c55e','#3b82f6','#a855f7','#f59e0b','#ec4899','#06b6d4','#ef4444','#14b8a6']
-
-/* ============================== main ============================== */
-export default function Analytics({ setPage, theme, adminData }) {
+export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const isDark = theme !== 'light'
-  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280)
-  useEffect(() => { const r = () => setVw(window.innerWidth); window.addEventListener('resize', r); return () => window.removeEventListener('resize', r) }, [])
-  const mobile = vw < 768
-  const tablet = vw >= 768 && vw < 1200
-
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1400)
   const [loading, setLoading] = useState(true)
-  const [range, setRange] = useState(30)
-  const [kpi, setKpi] = useState({ views:0, viewsDelta:0, unique:0, formViews:0, sponsorEvents:0 })
-  const [viewSpark, setViewSpark] = useState([])
+  const [range, setRange] = useState(30) // 7 | 30 | 90
+  const [isFull, setIsFull] = useState(false)
+  const rootRef = useRef(null)
+
+  const [kpi, setKpi] = useState({ views: 0, viewsChg: 0, unique: 0, uniqueChg: 0, leadViews: 0, leadChg: 0, sponsorImp: 0, sponsorChg: 0 })
   const [trend, setTrend] = useState([])
-  const [topCompanies, setTopCompanies] = useState([])
+  const [topCos, setTopCos] = useState([])
   const [countries, setCountries] = useState([])
   const [devices, setDevices] = useState([])
-  const [formCats, setFormCats] = useState([])
-  const [sourcePages, setSourcePages] = useState([])
-  const [sponsorPerf, setSponsorPerf] = useState([])
-  const [recent, setRecent] = useState([])
+  const [leadCats, setLeadCats] = useState([])
+  const [sources, setSources] = useState([])
+  const [sponsor, setSponsor] = useState({ imp: 0, clicks: 0, leads: 0 })
+  const [feed, setFeed] = useState([])
+  const [insights, setInsights] = useState([])
+  const [realtime, setRealtime] = useState(0)
 
-  useEffect(() => { fetchAll() }, [range])
+  const mobile = vw < 760
+  const tablet = vw >= 760 && vw < 1200
 
-  async function fetchAll() {
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    const onFs = () => setIsFull(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFs)
+    return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs) }
+  }, [])
+
+  useEffect(() => { loadAll() }, [range])
+
+  function toggleFull() {
+    const el = rootRef.current
+    if (!document.fullscreenElement) {
+      if (el?.requestFullscreen) el.requestFullscreen().catch(() => {})
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {})
+    }
+  }
+
+  const FLAGS = { 'United Arab Emirates':'🇦🇪','Saudi Arabia':'🇸🇦','United Kingdom':'🇬🇧','India':'🇮🇳','United States':'🇺🇸','USA':'🇺🇸','Pakistan':'🇵🇰','Egypt':'🇪🇬','Qatar':'🇶🇦','Kuwait':'🇰🇼','Oman':'🇴🇲','Bahrain':'🇧🇭','Canada':'🇨🇦','Germany':'🇩🇪','France':'🇫🇷','Unknown':'🌐' }
+
+  function deviceOf(ua) {
+    if (!ua) return 'Desktop'
+    const s = ua.toLowerCase()
+    if (/ipad|tablet|kindle|playbook|silk/.test(s)) return 'Tablet'
+    if (/mobi|iphone|android.*mobile|phone/.test(s)) return 'Mobile'
+    if (/android/.test(s)) return 'Tablet'
+    return 'Desktop'
+  }
+
+  function timeAgo(d) {
+    const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000)
+    if (s < 60) return s + 's ago'
+    if (s < 3600) return Math.floor(s / 60) + ' min ago'
+    if (s < 86400) return Math.floor(s / 3600) + ' hr ago'
+    return Math.floor(s / 86400) + 'd ago'
+  }
+
+  async function loadAll() {
     setLoading(true)
     try {
       const now = new Date()
-      const iso = (n) => new Date(now.getTime() - n*864e5).toISOString()
-      const span = Math.max(range, 60)
+      const since = new Date(now.getTime() - range * 864e5).toISOString()
+      const prevSince = new Date(now.getTime() - range * 2 * 864e5).toISOString()
 
       const [
-        { data: pv }, { data: lfv }, { data: sa }, { data: coRows },
+        { data: pv },
+        { data: pvPrev },
+        { data: lfv },
+        { data: lfvPrev },
+        { data: spon },
+        { data: sponPrev },
+        { data: cos },
       ] = await Promise.all([
-        supabase.from('profile_views_log').select('company_id,visited_at,visitor_ip,user_agent,country').gte('visited_at', iso(span)),
-        supabase.from('lead_form_views').select('form_id,source_url,category,created_at').gte('created_at', iso(span)),
-        supabase.from('sponsor_analytics').select('company_id,event_type,source_page,created_at').gte('created_at', iso(span)),
-        supabase.from('companies').select('id,name'),
+        supabase.from('profile_views_log').select('company_id, visited_at, visitor_ip, user_agent, country').gte('visited_at', since).order('visited_at', { ascending: false }),
+        supabase.from('profile_views_log').select('id, visited_at, visitor_ip').gte('visited_at', prevSince).lt('visited_at', since),
+        supabase.from('lead_form_views').select('source_url, category, created_at').gte('created_at', since).order('created_at', { ascending: false }),
+        supabase.from('lead_form_views').select('id, created_at').gte('created_at', prevSince).lt('created_at', since),
+        supabase.from('sponsor_analytics').select('company_id, event_type, source_page, created_at').gte('created_at', since).order('created_at', { ascending: false }),
+        supabase.from('sponsor_analytics').select('id, event_type, created_at').gte('created_at', prevSince).lt('created_at', since),
+        supabase.from('companies').select('id, name, area'),
       ])
 
-      const PV = pv || [], LFV = lfv || [], SA = sa || []
-      const coName = {}; (coRows||[]).forEach(c => { coName[c.id]=c.name })
-
-      // window filter to selected range
-      const inRange = (d) => new Date(d).getTime() >= now.getTime() - range*864e5
-      const PVr = PV.filter(r => inRange(r.visited_at))
-      const LFVr = LFV.filter(r => inRange(r.created_at))
-      const SAr = SA.filter(r => inRange(r.created_at))
-
-      // KPIs
-      const views = PVr.length
-      const uniqueIps = new Set(PVr.map(r => r.visitor_ip).filter(Boolean)).size
-      const formViews = LFVr.length
-      const sponsorEvents = SAr.length
-
-      // delta: this range vs previous range
-      const cur = PV.filter(r => { const t=new Date(r.visited_at).getTime(); return t >= now.getTime()-range*864e5 }).length
-      const prev = PV.filter(r => { const t=new Date(r.visited_at).getTime(); return t < now.getTime()-range*864e5 && t >= now.getTime()-range*2*864e5 }).length
-      const viewsDelta = prev===0 ? (cur>0?100:0) : ((cur-prev)/prev)*100
-
-      // sparkline (14d) + trend (range days)
-      const sparkN = 14
-      const spark = {}; for (let i=sparkN-1;i>=0;i--) spark[iso(i).slice(0,10)]=0
-      const tr = {}; for (let i=range-1;i>=0;i--) tr[iso(i).slice(0,10)]=0
-      PV.forEach(r => { const k=(r.visited_at||'').slice(0,10); if(spark[k]!==undefined)spark[k]++; if(tr[k]!==undefined)tr[k]++ })
-      setViewSpark(Object.values(spark)); setTrend(Object.values(tr))
-
-      // top viewed companies
+      const views = pv || []
       const coMap = {}
-      PVr.forEach(r => { if(r.company_id) coMap[r.company_id]=(coMap[r.company_id]||0)+1 })
-      setTopCompanies(Object.entries(coMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,value]) => ({ name: coName[id]||'Unknown', value })))
+      ;(cos || []).forEach(c => { coMap[c.id] = c.name })
 
-      // country breakdown
-      const cMap = {}
-      PVr.forEach(r => { const c=(r.country||'Unknown'); cMap[c]=(cMap[c]||0)+1 })
-      setCountries(Object.entries(cMap).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([name,value],i) => ({ name, value, color:CAT_COLORS[i%CAT_COLORS.length] })))
+      const totalViews = views.length
+      const prevViews = (pvPrev || []).length
+      const uniq = new Set(views.map(v => v.visitor_ip).filter(Boolean)).size
+      const prevUniq = new Set((pvPrev || []).map(v => v.visitor_ip).filter(Boolean)).size
+      const leadV = (lfv || []).length
+      const prevLeadV = (lfvPrev || []).length
+      const sImp = (spon || []).filter(s => s.event_type === 'view').length
+      const prevSImp = (sponPrev || []).filter(s => s.event_type === 'view').length
+      const pct = (cur, prev) => prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : (cur > 0 ? 100 : 0)
 
-      // device breakdown
-      const dMap = {}
-      PVr.forEach(r => { const d=deviceOf(r.user_agent); dMap[d]=(dMap[d]||0)+1 })
-      setDevices(Object.entries(dMap).sort((a,b)=>b[1]-a[1]).map(([name,value]) => ({ name, value, color:DEVICE_COLOR[name]||'#64748b' })))
+      setKpi({
+        views: totalViews, viewsChg: pct(totalViews, prevViews),
+        unique: uniq, uniqueChg: pct(uniq, prevUniq),
+        leadViews: leadV, leadChg: pct(leadV, prevLeadV),
+        sponsorImp: sImp, sponsorChg: pct(sImp, prevSImp),
+      })
 
-      // lead forms by category
-      const catMap = {}
-      LFVr.forEach(r => { const c=(r.category||'Uncategorized'); catMap[c]=(catMap[c]||0)+1 })
-      setFormCats(Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,value],i) => ({ name, value, color:CAT_COLORS[i%CAT_COLORS.length] })))
+      const buckets = {}
+      const days = range
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 864e5)
+        buckets[d.toISOString().slice(0, 10)] = 0
+      }
+      views.forEach(v => { const k = (v.visited_at || '').slice(0, 10); if (k in buckets) buckets[k]++ })
+      setTrend(Object.entries(buckets).map(([k, v]) => ({ label: k, v })))
 
-      // top source pages (lead form source_url + sponsor source_page)
-      const srcMap = {}
-      const cleanUrl = (u) => { if(!u) return 'Direct'; try { const x=new URL(u); return (x.hostname+x.pathname).replace(/\/$/,'') } catch { return u.replace(/^https?:\/\//,'').slice(0,40) } }
-      LFVr.forEach(r => { const s=cleanUrl(r.source_url); srcMap[s]=(srcMap[s]||0)+1 })
-      SAr.forEach(r => { const s=cleanUrl(r.source_page); srcMap[s]=(srcMap[s]||0)+1 })
-      setSourcePages(Object.entries(srcMap).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,value]) => ({ name, value })))
+      const coCount = {}
+      views.forEach(v => { if (v.company_id) coCount[v.company_id] = (coCount[v.company_id] || 0) + 1 })
+      const topArr = Object.entries(coCount).map(([id, c]) => ({ name: coMap[id] || 'Unknown', views: c }))
+        .sort((a, b) => b.views - a.views).slice(0, 5)
+      const maxCo = Math.max(1, ...topArr.map(t => t.views))
+      setTopCos(topArr.map(t => ({ ...t, pct: Math.round((t.views / maxCo) * 100) })))
 
-      // sponsor performance by event_type
-      const evMap = {}
-      SAr.forEach(r => { const e=(r.event_type||'event'); evMap[e]=(evMap[e]||0)+1 })
-      const evColor = { impression:'#3b82f6', view:'#3b82f6', click:'#f59e0b', lead:'#22c55e', call:'#a855f7' }
-      setSponsorPerf(Object.entries(evMap).sort((a,b)=>b[1]-a[1]).map(([name,value]) => ({ name: name.charAt(0).toUpperCase()+name.slice(1), value, color:evColor[name.toLowerCase()]||'#06b6d4' })))
+      const ctry = {}
+      views.forEach(v => { const c = v.country || 'Unknown'; ctry[c] = (ctry[c] || 0) + 1 })
+      const ctryArr = Object.entries(ctry).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 6)
+      const ctryTotal = Math.max(1, ctryArr.reduce((s, c) => s + c.count, 0))
+      setCountries(ctryArr.map(c => ({ ...c, pct: Math.round((c.count / ctryTotal) * 100), flag: FLAGS[c.name] || '🌐' })))
 
-      // recent visitors feed
-      const feed = PVr.slice().sort((a,b)=>new Date(b.visited_at)-new Date(a.visited_at)).slice(0,6).map(r => ({
-        text: `${coName[r.company_id]||'A profile'} viewed${r.country?' from '+r.country:''}`,
-        sub: deviceOf(r.user_agent),
-        time: r.visited_at,
-        color: DEVICE_COLOR[deviceOf(r.user_agent)]||'#22c55e',
+      const dev = { Mobile: 0, Desktop: 0, Tablet: 0 }
+      views.forEach(v => { dev[deviceOf(v.user_agent)]++ })
+      const devTotal = Math.max(1, dev.Mobile + dev.Desktop + dev.Tablet)
+      setDevices([
+        { name: 'Mobile', count: dev.Mobile, pct: Math.round((dev.Mobile / devTotal) * 100), color: '#22d3ee' },
+        { name: 'Desktop', count: dev.Desktop, pct: Math.round((dev.Desktop / devTotal) * 100), color: '#6366f1' },
+        { name: 'Tablet', count: dev.Tablet, pct: Math.round((dev.Tablet / devTotal) * 100), color: '#a855f7' },
+      ])
+
+      const catColors = ['#a855f7', '#22d3ee', '#6366f1', '#f59e0b', '#ec4899', '#10b981']
+      const cat = {}
+      ;(lfv || []).forEach(l => { const c = l.category || 'Uncategorized'; cat[c] = (cat[c] || 0) + 1 })
+      const catArr = Object.entries(cat).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 6)
+      const catTotal = Math.max(1, catArr.reduce((s, c) => s + c.count, 0))
+      setLeadCats(catArr.map((c, i) => ({ ...c, pct: Math.round((c.count / catTotal) * 100), color: catColors[i % catColors.length] })))
+
+      const src = {}
+      ;(lfv || []).forEach(l => { const s = l.source_url || 'direct'; src[s] = (src[s] || 0) + 1 })
+      const srcArr = Object.entries(src).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5)
+      const srcTotal = Math.max(1, srcArr.reduce((s, c) => s + c.count, 0))
+      setSources(srcArr.map(s => ({ name: s.name, pct: Math.round((s.count / srcTotal) * 100) })))
+
+      const sImpAll = (spon || []).filter(s => s.event_type === 'view').length
+      const sClick = (spon || []).filter(s => s.event_type === 'click').length
+      const sLead = (spon || []).filter(s => s.event_type === 'quote_request').length
+      setSponsor({ imp: sImpAll, clicks: sClick, leads: sLead })
+
+      const acts = []
+      views.slice(0, 12).forEach(v => acts.push({
+        t: v.visited_at, country: v.country || 'Unknown', flag: FLAGS[v.country] || '🌐',
+        action: `Viewed ${coMap[v.company_id] || 'a company'} profile`,
+        path: '/company/' + ((coMap[v.company_id] || 'profile').toLowerCase().replace(/\s+/g, '-')), icon: 'eye',
       }))
-      setRecent(feed)
+      ;(lfv || []).slice(0, 8).forEach(l => acts.push({
+        t: l.created_at, country: 'Unknown', flag: '🌐',
+        action: 'Opened Lead Form', path: '/lead-form/' + ((l.category || 'general').toLowerCase().replace(/\s+/g, '-')), icon: 'form',
+      }))
+      ;(spon || []).slice(0, 8).forEach(s => acts.push({
+        t: s.created_at, country: 'Unknown', flag: '🌐',
+        action: s.event_type === 'click' ? 'Clicked Sponsor Banner' : s.event_type === 'quote_request' ? 'Requested Sponsor Quote' : 'Viewed Sponsor',
+        path: '/sponsor/' + (s.source_page || 'home'), icon: 'click',
+      }))
+      acts.sort((a, b) => new Date(b.t) - new Date(a.t))
+      setFeed(acts.slice(0, 10))
 
-      setKpi({ views, viewsDelta, unique:uniqueIps, formViews, sponsorEvents })
-    } catch (e) { console.error('Analytics fetch error:', e) }
+      setRealtime(views.filter(v => (Date.now() - new Date(v.visited_at).getTime()) < 30 * 60 * 1000).length)
+
+      const ins = []
+      const topCountry = ctryArr.find(c => c.name !== 'Unknown')
+      if (topCountry) ins.push({ icon: 'trend', text: `Most traffic comes from ${topCountry.name} (${Math.round((topCountry.count / ctryTotal) * 100)}% of views).` })
+      const mobilePct = Math.round((dev.Mobile / devTotal) * 100)
+      if (devTotal > 1) ins.push({ icon: 'device', text: mobilePct >= 50 ? `Mobile dominates with ${mobilePct}% of all visits — keep the mobile UX sharp.` : `Desktop leads with ${Math.round((dev.Desktop / devTotal) * 100)}% of visits.` })
+      if (topArr[0]) ins.push({ icon: 'star', text: `${topArr[0].name} is the most-viewed profile with ${topArr[0].views} views.` })
+      if (sClick > 0 && sImpAll > 0) ins.push({ icon: 'spark', text: `Sponsor CTR is ${Math.round((sClick / sImpAll) * 100)}% (${sClick} clicks / ${sImpAll} impressions).` })
+      if (catArr[0]) ins.push({ icon: 'cat', text: `"${catArr[0].name}" generated the most lead-form interest.` })
+      if (ins.length === 0) ins.push({ icon: 'trend', text: 'Data is still building up — insights will sharpen as more visits come in.' })
+      setInsights(ins.slice(0, 4))
+
+    } catch (e) { console.error('Analytics load error:', e) }
     finally { setLoading(false) }
   }
 
-  const C = {
-    text:   isDark ? '#f1f5f9' : '#0f172a',
-    text2:  isDark ? '#9ca3af' : '#475569',
-    text3:  isDark ? '#6b7280' : '#94a3b8',
-    border: isDark ? 'rgba(255,255,255,0.07)' : '#e8edf3',
-    card:   isDark ? '#141921' : '#ffffff',
-    row:    isDark ? 'rgba(255,255,255,0.03)' : '#f6f8fb',
-    shadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 1px 10px rgba(15,40,80,0.05)',
-    bar:    isDark ? 'rgba(255,255,255,0.06)' : '#eef2f7',
-    green:'#22c55e', blue:'#3b82f6', purple:'#a855f7', gold:'#f59e0b', cyan:'#06b6d4', pink:'#ec4899', red:'#ef4444',
+  const C = isDark ? {
+    bg: '#080a14', panel: 'rgba(18,22,40,0.7)', panelSolid: '#10131f',
+    line: 'rgba(255,255,255,0.07)', soft: 'rgba(255,255,255,0.03)',
+    t1: '#eef2fb', t2: '#9aa5bd', t3: '#5e6a83',
+    cyan: '#22d3ee', purple: '#a855f7', indigo: '#6366f1', green: '#10b981', amber: '#f59e0b', pink: '#ec4899',
+    glow: '0 0 0 1px rgba(255,255,255,0.04), 0 8px 40px rgba(34,211,238,0.06)',
+  } : {
+    bg: '#eef2f8', panel: '#ffffff', panelSolid: '#ffffff',
+    line: '#e3e9f2', soft: '#f4f7fb',
+    t1: '#0f1830', t2: '#56627a', t3: '#94a0b5',
+    cyan: '#0891b2', purple: '#9333ea', indigo: '#4f46e5', green: '#059669', amber: '#d97706', pink: '#db2777',
+    glow: '0 1px 2px rgba(20,40,80,0.05), 0 10px 30px rgba(20,40,80,0.06)',
   }
-  const cardStyle = { background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'16px 18px', boxShadow:C.shadow }
-  const H = ({ children, right }) => (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, gap:8 }}>
-      <span style={{ fontSize:14, fontWeight:700, color:C.text }}>{children}</span>{right}
-    </div>
-  )
-  const grid = (m,t,d) => ({ display:'grid', gridTemplateColumns: mobile?m:tablet?t:d, gap:14 })
-  const fmtPct = (p) => `${p>=0?'+':''}${p.toFixed(1)}%`
 
-  if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'80vh' }}>
-      <div style={{ textAlign:'center' }}>
-        <div style={{ width:38, height:38, border:`3px solid ${C.green}`, borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-        <div style={{ fontSize:13, color:C.text3 }}>Loading Analytics...</div>
+  const F = "'Inter','Manrope',system-ui,sans-serif"
+
+  function Panel({ children, style, glow }) {
+    return (
+      <div style={{ background: C.panel, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+        border: `1px solid ${C.line}`, borderRadius: 16, padding: 16, boxShadow: glow ? C.glow : 'none', ...style }}>{children}</div>
+    )
+  }
+
+  function Spark({ data, color, h = 40, w = 150 }) {
+    if (!data || data.length < 2) return <div style={{ height: h }} />
+    const max = Math.max(...data, 1), min = Math.min(...data)
+    const rng = Math.max(1, max - min)
+    const pts = data.map((d, i) => `${(i / (data.length - 1)) * w},${h - ((d - min) / rng) * (h - 4) - 2}`).join(' ')
+    const id = 'sg' + color.replace('#', '')
+    return (
+      <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+        <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient></defs>
+        <polyline points={`0,${h} ${pts} ${w},${h}`} fill={`url(#${id})`} stroke="none" />
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  function Donut({ data, size = 150, thickness = 22, center }) {
+    const total = Math.max(1, data.reduce((s, d) => s + d.count, 0))
+    const r = (size - thickness) / 2, cx = size / 2, cy = size / 2
+    const circ = 2 * Math.PI * r
+    let offset = 0
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.soft} strokeWidth={thickness} />
+        {data.map((d, i) => {
+          const dash = (d.count / total) * circ
+          const el = (
+            <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth={thickness}
+              strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={-offset} transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="butt" />
+          )
+          offset += dash
+          return el
+        })}
+        {center}
+      </svg>
+    )
+  }
+
+  function fmt(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.00$/, '') + 'M'
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'
+    return String(n ?? 0)
+  }
+
+  function KpiCard({ label, value, chg, color, icon, sparkData }) {
+    const up = chg >= 0
+    return (
+      <Panel glow style={{ position: 'relative', overflow: 'hidden', minWidth: 0 }}>
+        <div style={{ position: 'absolute', top: -30, right: -30, width: 90, height: 90, borderRadius: '50%', background: color, filter: 'blur(45px)', opacity: isDark ? 0.22 : 0.12 }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDark ? `${color}22` : `${color}1a`, border: `1px solid ${color}55` }}>
+            <i className={`ti ${icon}`} style={{ fontSize: 19, color }} />
+          </div>
+          <i className="ti ti-dots" style={{ color: C.t3, fontSize: 16 }} />
+        </div>
+        <div style={{ fontSize: 11.5, color: C.t2, marginTop: 12, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: C.t1, letterSpacing: '-0.5px', lineHeight: 1.1, marginTop: 2 }}>{fmt(value)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: up ? C.green : C.pink }}>
+            <i className={`ti ${up ? 'ti-trending-up' : 'ti-trending-down'}`} style={{ fontSize: 14 }} />{Math.abs(chg)}%
+          </span>
+          <div style={{ width: '52%' }}><Spark data={sparkData} color={color} h={32} /></div>
+        </div>
+      </Panel>
+    )
+  }
+
+  const Title = ({ n, children, right }) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {n != null && <span style={{ fontSize: 12, fontWeight: 800, color: C.t3 }}>{n}.</span>}
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.t1 }}>{children}</span>
       </div>
+      {right}
     </div>
   )
 
-  const KPIS = [
-    { label:'Profile Views',   value:kpi.views,         icon:'ti-eye',          color:C.green,  delta:kpi.viewsDelta, spark:viewSpark },
-    { label:'Unique Visitors', value:kpi.unique,        icon:'ti-users',        color:C.blue },
-    { label:'Lead Form Views', value:kpi.formViews,     icon:'ti-clipboard-list', color:C.purple },
-    { label:'Sponsor Events',  value:kpi.sponsorEvents, icon:'ti-ad',           color:C.gold },
-  ]
-  const maxCo = Math.max(...topCompanies.map(c=>c.value), 1)
-  const maxSrc = Math.max(...sourcePages.map(s=>s.value), 1)
-  const maxSp = Math.max(...sponsorPerf.map(s=>s.value), 1)
-  const countrySum = countries.reduce((s,x)=>s+x.value,0)||1
-  const deviceSum = devices.reduce((s,x)=>s+x.value,0)||1
-  const catSum = formCats.reduce((s,x)=>s+x.value,0)||1
+  const iconMap = { eye: 'ti-eye', form: 'ti-forms', click: 'ti-click', trend: 'ti-trending-up', device: 'ti-device-mobile', star: 'ti-star', spark: 'ti-sparkles', cat: 'ti-category' }
+
+  function TrendChart() {
+    const d = trend
+    if (!d.length) return <div style={{ height: 210 }} />
+    const W = 720, H = 210, pad = 28
+    const max = Math.max(...d.map(x => x.v), 1)
+    const stepX = (W - pad) / Math.max(1, d.length - 1)
+    const pts = d.map((x, i) => `${pad + i * stepX},${H - 24 - (x.v / max) * (H - 50)}`).join(' ')
+    const area = `${pad},${H - 24} ${pts} ${pad + (d.length - 1) * stepX},${H - 24}`
+    const ticks = mobile ? 4 : 6
+    return (
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+        <defs>
+          <linearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.cyan} stopOpacity="0.35" /><stop offset="100%" stopColor={C.cyan} stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="trendLine" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={C.cyan} /><stop offset="100%" stopColor={C.indigo} />
+          </linearGradient>
+        </defs>
+        {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+          <line key={i} x1={pad} y1={24 + f * (H - 48)} x2={W} y2={24 + f * (H - 48)} stroke={C.line} strokeWidth="1" />
+        ))}
+        <polygon points={area} fill="url(#trendArea)" />
+        <polyline points={pts} fill="none" stroke="url(#trendLine)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {d.map((x, i) => {
+          if (i % Math.ceil(d.length / ticks) !== 0 && i !== d.length - 1) return null
+          return <text key={i} x={pad + i * stepX} y={H - 6} fontSize="9" fill={C.t3} textAnchor="middle">{x.label.slice(5)}</text>
+        })}
+      </svg>
+    )
+  }
+
+  const grid3 = mobile ? '1fr' : 'repeat(3, 1fr)'
+  const mainSplit = (mobile || tablet) ? '1fr' : '1.6fr 1fr'
 
   return (
-    <div style={{ color:C.text, maxWidth:1400 }}>
+    <div ref={rootRef} style={{ background: C.bg, minHeight: '100%', fontFamily: F, color: C.t1, padding: mobile ? 12 : 20, position: 'relative' }}>
+      <style>{`@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}} .an-scroll::-webkit-scrollbar{width:6px}.an-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:99px}`}</style>
 
       {/* HEADER */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
-        <div>
-          <h1 style={{ fontSize: mobile?20:24, fontWeight:800, color:C.text, margin:0, display:'flex', alignItems:'center', gap:9 }}>
-            <i className="ti ti-chart-line" style={{ color:C.green }}/> Analytics
-          </h1>
-          <p style={{ fontSize:13, color:C.text2, marginTop:4 }}>Traffic, profile views &amp; visitor insights.</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setPage && setPage('dashboard')} title="Back"
+            style={{ width: 38, height: 38, borderRadius: 11, border: `1px solid ${C.line}`, background: C.soft, color: C.t1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+          </button>
+          <div>
+            <div style={{ fontSize: mobile ? 19 : 23, fontWeight: 800, letterSpacing: '-0.5px' }}>Analytics Overview</div>
+            <div style={{ fontSize: 11.5, color: C.t2, marginTop: 1 }}>AI-Powered Traffic Intelligence Platform</div>
+          </div>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-          <div style={{ display:'flex', background:C.card, border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden' }}>
-            {[7,30,90].map(d => (
-              <button key={d} onClick={()=>setRange(d)} style={{ padding:'8px 12px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer', background: range===d?C.green:'transparent', color: range===d?'#fff':C.text2 }}>{d}d</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: 3 }}>
+            {[7, 30, 90].map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                style={{ border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 7,
+                  background: range === r ? `linear-gradient(135deg,${C.cyan},${C.indigo})` : 'transparent',
+                  color: range === r ? '#fff' : C.t2 }}>{r}d</button>
             ))}
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:'8px 12px', color:C.text2 }}>
-            <i className="ti ti-clock" style={{ fontSize:13, color:C.green }}/>
-            <Clock isDark={isDark}/>
-          </div>
-          <button onClick={fetchAll} style={{ display:'flex', alignItems:'center', gap:6, background:C.green, color:'#fff', border:'none', borderRadius:10, padding:'9px 16px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-            <i className="ti ti-refresh" style={{ fontSize:14 }}/> Refresh
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.green, background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.1)', border: `1px solid ${C.green}44`, borderRadius: 9, padding: '7px 11px' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} /> Live
+          </span>
+          <button onClick={toggleFull} title="Fullscreen"
+            style={{ width: 38, height: 38, borderRadius: 11, border: `1px solid ${C.line}`, background: C.soft, color: C.t1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className={`ti ${isFull ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} style={{ fontSize: 17 }} />
           </button>
         </div>
       </div>
 
-      {/* KPI CARDS */}
-      <div style={{ ...grid('repeat(2,1fr)','repeat(4,1fr)','repeat(4,1fr)'), marginBottom:14 }}>
-        {KPIS.map((s,i) => (
-          <div key={i} style={{ ...cardStyle, transition:'all .15s' }}
-            onMouseEnter={e=>{ e.currentTarget.style.borderColor=s.color+'66'; e.currentTarget.style.transform='translateY(-2px)' }}
-            onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.transform='none' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:11 }}>
-              <span style={{ fontSize:12, color:C.text2, fontWeight:500 }}>{s.label}</span>
-              <div style={{ width:32, height:32, borderRadius:9, background:s.color+'1e', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <i className={`ti ${s.icon}`} style={{ fontSize:16, color:s.color }}/>
-              </div>
-            </div>
-            <div style={{ fontSize:26, fontWeight:800, color:C.text, lineHeight:1 }}>
-              <AnimatedNumber value={s.value}/>
-            </div>
-            {s.delta !== undefined ? (
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:7 }}>
-                <span style={{ fontSize:11, fontWeight:600, color: s.delta>=0?C.green:C.red, display:'flex', alignItems:'center', gap:2 }}>
-                  <i className={`ti ${s.delta>=0?'ti-trending-up':'ti-trending-down'}`} style={{ fontSize:12 }}/>{fmtPct(s.delta)}
-                </span>
-                {s.spark && <Sparkline data={s.spark} color={s.color} width={60} height={26}/>}
-              </div>
-            ) : <div style={{ height:8 }}/>}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '80px 0', color: C.t2 }}>
+          <div style={{ width: 34, height: 34, border: `3px solid ${C.line}`, borderTopColor: C.cyan, borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          Loading analytics…
+        </div>
+      ) : (
+        <>
+          {/* KPI ROW */}
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
+            <KpiCard label="Total Profile Views" value={kpi.views} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} />
+            <KpiCard label="Unique Visitors (IP)" value={kpi.unique} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} />
+            <KpiCard label="Lead Form Views" value={kpi.leadViews} chg={kpi.leadChg} color={C.indigo} icon="ti-forms" sparkData={trend.map(t => t.v)} />
+            <KpiCard label="Sponsor Impressions" value={kpi.sponsorImp} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} />
           </div>
-        ))}
-      </div>
 
-      {/* ROW: Views Trend | Recent visitors */}
-      <div style={{ ...grid('1fr','1fr','1.7fr 1fr'), marginBottom:14 }}>
-        <div style={cardStyle}>
-          <H right={<span style={{ fontSize:10, color:C.text3, background:C.row, padding:'3px 10px', borderRadius:20, border:`1px solid ${C.border}` }}>{range} days</span>}>Profile Views Trend</H>
-          <LineChart data={trend} color={C.green} isDark={isDark} height={mobile?160:200}/>
-          <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, fontSize:9, color:C.text3 }}>
-            <span>{range}d ago</span><span>{Math.round(range/2)}d ago</span><span>Today</span>
+          {/* TREND + TOP | AI + FEED */}
+          <div style={{ display: 'grid', gridTemplateColumns: mainSplit, gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+              <Panel glow>
+                <Title n="5" right={<span style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.t2 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 14, height: 3, background: C.cyan, borderRadius: 9 }} /> Views</span>
+                </span>}>Views Trend (Daily)</Title>
+                <TrendChart />
+              </Panel>
+
+              <Panel glow>
+                <Title n="6">Top Viewed Companies</Title>
+                {topCos.length === 0 ? <Empty C={C} text="No profile views yet in this period." /> : topCos.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < topCos.length - 1 ? 13 : 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: C.t3, width: 18 }}>{String(i + 1).padStart(2, '0')}</span>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: C.soft, border: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: C.t2, flexShrink: 0 }}>{c.name.slice(0, 2).toUpperCase()}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                      </div>
+                      <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ width: `${c.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.purple},${C.indigo})`, borderRadius: 99 }} />
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t2, minWidth: 48, textAlign: 'right' }}>{c.views.toLocaleString()}</span>
+                  </div>
+                ))}
+              </Panel>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+              <Panel glow style={{ background: isDark ? 'linear-gradient(160deg,rgba(168,85,247,0.12),rgba(34,211,238,0.06))' : C.panel }}>
+                <Title right={<i className="ti ti-brain" style={{ fontSize: 18, color: C.purple }} />}>
+                  <span style={{ letterSpacing: '0.06em', fontSize: 12, color: C.t2, fontWeight: 800 }}>AI INSIGHTS</span>
+                </Title>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+                  {insights.map((ins, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${[C.green, C.purple, C.cyan, C.amber][i % 4]}22`, border: `1px solid ${[C.green, C.purple, C.cyan, C.amber][i % 4]}55` }}>
+                        <i className={`ti ${iconMap[ins.icon] || 'ti-bulb'}`} style={{ fontSize: 13, color: [C.green, C.purple, C.cyan, C.amber][i % 4] }} />
+                      </div>
+                      <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{ins.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel glow>
+                <Title n="12" right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Visitors / Activity</Title>
+                <div className="an-scroll" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}` }}>
+                        <i className={`ti ${iconMap[a.icon]}`} style={{ fontSize: 13, color: C.cyan }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t1 }}>{a.flag} {a.country}</span>
+                          <span style={{ fontSize: 10, color: C.t3, whiteSpace: 'nowrap' }}>{timeAgo(a.t)}</span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: C.t2, marginTop: 1 }}>{a.action}</div>
+                        <div style={{ fontSize: 10, color: C.t3, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.path}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
           </div>
-        </div>
-        <div style={cardStyle}>
-          <H right={<span style={{ fontSize:10, color:C.green, display:'flex', alignItems:'center', gap:4 }}><span style={{ width:7, height:7, borderRadius:'50%', background:C.green }}/>Live</span>}>Recent Visitors</H>
-          {recent.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No visits yet</div> : recent.map((a,i) => (
-            <div key={i} style={{ display:'flex', gap:10, padding:'9px 0', borderBottom: i<recent.length-1?`1px solid ${C.border}`:'none' }}>
-              <div style={{ width:30, height:30, borderRadius:8, background:a.color+'1e', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <i className="ti ti-eye" style={{ fontSize:14, color:a.color }}/>
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:11.5, color:C.text, lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.text}</div>
-                <div style={{ fontSize:10, color:C.text3, marginTop:1 }}>{a.sub} · {timeAgo(a.time)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* ROW: Top companies | Country | Device */}
-      <div style={{ ...grid('1fr','1fr 1fr','1.2fr 1fr 1fr'), marginBottom:14 }}>
-        <div style={cardStyle}>
-          <H right={<span onClick={()=>setPage&&setPage('companies')} style={{ fontSize:11, color:C.green, cursor:'pointer', fontWeight:600 }}>All</span>}>Most Viewed Profiles</H>
-          {topCompanies.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No views yet</div> : topCompanies.map((c,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-              <span style={{ fontSize:11, fontWeight:700, color:C.text3, width:14 }}>{i+1}</span>
-              <span style={{ flex:'0 0 38%', fontSize:11.5, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
-              <div style={{ flex:1, height:6, background:C.bar, borderRadius:99, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${(c.value/maxCo)*100}%`, background:C.green, borderRadius:99 }}/>
-              </div>
-              <span style={{ fontSize:12, fontWeight:700, color:C.text, minWidth:28, textAlign:'right' }}>{c.value}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={cardStyle}>
-          <H>Visitors by Country</H>
-          {countries.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No data yet</div> : (
-            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
-              <Donut segments={countries} total={kpi.views} label="Views" isDark={isDark} size={mobile?120:130}/>
-              <div style={{ flex:1, minWidth:100 }}>
-                {countries.slice(0,5).map((c,i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7, fontSize:11 }}>
-                    <span style={{ width:8, height:8, borderRadius:'50%', background:c.color, flexShrink:0 }}/>
-                    <span style={{ color:C.text2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
-                    <span style={{ color:C.text, fontWeight:700 }}>{Math.round(c.value/countrySum*100)}%</span>
+          {/* COUNTRY + DEVICE + LEAD CATS */}
+          <div style={{ display: 'grid', gridTemplateColumns: grid3, gap: 16, marginBottom: 16 }}>
+            <Panel glow>
+              <Title n="7">Country Breakdown</Title>
+              {countries.length === 0 ? <Empty C={C} text="No country data yet." /> : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, ${C.indigo}, ${C.cyan}33 60%, transparent 72%)`, filter: 'blur(2px)' }} />
+                    <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', border: `1px solid ${C.cyan}55`, boxShadow: `inset 0 0 22px ${C.cyan}33` }} />
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>🌍</div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={cardStyle}>
-          <H>Device Breakdown</H>
-          {devices.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No data yet</div> : (
-            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
-              <Donut segments={devices} total={kpi.views} label="Views" isDark={isDark} size={mobile?120:130}/>
-              <div style={{ flex:1, minWidth:100 }}>
-                {devices.map((c,i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7, fontSize:11 }}>
-                    <span style={{ width:8, height:8, borderRadius:'50%', background:c.color, flexShrink:0 }}/>
-                    <span style={{ color:C.text2, flex:1 }}>{c.name}</span>
-                    <span style={{ color:C.text, fontWeight:700 }}>{Math.round(c.value/deviceSum*100)}%</span>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    {countries.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                        <span style={{ fontSize: 13 }}>{c.flag}</span>
+                        <span style={{ fontSize: 12, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+                </div>
+              )}
+            </Panel>
 
-      {/* ROW: Lead Forms by Category | Top Source Pages | Sponsor Performance */}
-      <div style={grid('1fr','1fr 1fr','1fr 1.2fr 1fr')}>
-        <div style={cardStyle}>
-          <H>Lead Forms by Category</H>
-          {formCats.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No form views yet</div> : (
-            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
-              <Donut segments={formCats} total={kpi.formViews} label="Views" isDark={isDark} size={mobile?120:130}/>
-              <div style={{ flex:1, minWidth:100 }}>
-                {formCats.map((c,i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7, fontSize:11 }}>
-                    <span style={{ width:8, height:8, borderRadius:'50%', background:c.color, flexShrink:0 }}/>
-                    <span style={{ color:C.text2, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
-                    <span style={{ color:C.text, fontWeight:700 }}>{c.value}</span>
-                    <span style={{ color:C.text3, fontSize:9.5 }}>({Math.round(c.value/catSum*100)}%)</span>
+            <Panel glow>
+              <Title n="8">Device Breakdown</Title>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <Donut data={devices} size={120} thickness={20} />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: C.t1 }}>{fmt(devices.reduce((s, d) => s + d.count, 0))}</span>
+                    <span style={{ fontSize: 9, color: C.t3 }}>views</span>
                   </div>
-                ))}
+                </div>
+                <div style={{ flex: 1 }}>
+                  {devices.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: C.t1, flex: 1 }}>{d.name}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{d.pct}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            </Panel>
 
-        <div style={cardStyle}>
-          <H>Top Source Pages</H>
-          {sourcePages.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No source data yet</div> : sourcePages.map((s,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-              <i className="ti ti-link" style={{ fontSize:12, color:C.cyan, flexShrink:0 }}/>
-              <span style={{ flex:1, fontSize:11, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.name}</span>
-              <div style={{ width:46, height:5, background:C.bar, borderRadius:99, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${(s.value/maxSrc)*100}%`, background:C.cyan, borderRadius:99 }}/>
-              </div>
-              <span style={{ fontSize:11.5, fontWeight:700, color:C.text, minWidth:24, textAlign:'right' }}>{s.value}</span>
-            </div>
-          ))}
-        </div>
+            <Panel glow>
+              <Title n="9">Lead Forms by Category</Title>
+              {leadCats.length === 0 ? <Empty C={C} text="No lead-form views yet." /> : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flexShrink: 0 }}><Donut data={leadCats} size={120} thickness={20} /></div>
+                  <div style={{ flex: 1 }}>
+                    {leadCats.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11.5, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                        <span style={{ fontSize: 10, color: C.t3 }}>({c.count})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
 
-        <div style={cardStyle}>
-          <H>Sponsor Performance</H>
-          {sponsorPerf.length===0 ? <div style={{ textAlign:'center', padding:'30px 0', color:C.text3, fontSize:12 }}>No sponsor data yet</div> : (
-            <div style={{ display:'flex', alignItems:'flex-end', gap:12, height:150, paddingTop:10 }}>
-              {sponsorPerf.map((c,i) => (
-                <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5, height:'100%', justifyContent:'flex-end' }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:C.text }}>{c.value}</span>
-                  <div style={{ width:'60%', maxWidth:34, height:`${Math.max(6,(c.value/maxSp)*100)}%`, background:c.color, borderRadius:'6px 6px 0 0' }}/>
-                  <span style={{ fontSize:9.5, color:C.text3, textAlign:'center' }}>{c.name}</span>
+          {/* SOURCES + SPONSOR */}
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1.3fr', gap: 16 }}>
+            <Panel glow>
+              <Title n="10">Top Source Pages</Title>
+              {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
+                <div key={i} style={{ marginBottom: i < sources.length - 1 ? 11 : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{s.pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${s.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius: 99 }} />
+                  </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-      </div>
+            </Panel>
 
+            <Panel glow>
+              <Title n="11">Sponsor Performance</Title>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+                {[
+                  { l: 'IMPRESSIONS', v: sponsor.imp, c: C.purple },
+                  { l: 'CLICKS', v: sponsor.clicks, c: C.cyan },
+                  { l: 'LEADS', v: sponsor.leads, c: C.green },
+                ].map((m, i) => (
+                  <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em' }}>{m.l}</div>
+                    <div style={{ fontSize: 19, fontWeight: 800, color: C.t1, marginTop: 3 }}>{m.v.toLocaleString()}</div>
+                    <div style={{ height: 3, background: m.c, borderRadius: 99, marginTop: 7, opacity: 0.7 }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em', marginBottom: 9 }}>CONVERSION FUNNEL</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(() => {
+                  const imp = Math.max(1, sponsor.imp)
+                  const stages = [
+                    { l: 'Impressions', v: sponsor.imp, sub: '100%', c: C.purple },
+                    { l: 'Clicks', v: sponsor.clicks, sub: Math.round((sponsor.clicks / imp) * 100) + '%', c: C.cyan },
+                    { l: 'Leads', v: sponsor.leads, sub: Math.round((sponsor.leads / imp) * 100) + '%', c: C.green },
+                  ]
+                  return stages.map((s, i) => (
+                    <div key={i} style={{ flex: 1, background: `linear-gradient(135deg,${s.c},${s.c}aa)`, borderRadius: 10, padding: '12px 10px', color: '#fff', opacity: isDark ? 0.92 : 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.95 }}>{s.l}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, marginTop: 3 }}>{s.v.toLocaleString()}</div>
+                      <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{s.sub}</div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </Panel>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 18, fontSize: 11, color: C.t2 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} /> All Systems Operational
+              <span style={{ color: C.t3, marginLeft: 8 }}>· {realtime} active in last 30 min</span>
+            </span>
+            <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
+          </div>
+        </>
+      )}
     </div>
   )
+}
+
+function Empty({ C, text }) {
+  return <div style={{ fontSize: 12, color: C.t3, padding: '18px 4px', textAlign: 'center' }}>{text}</div>
 }
