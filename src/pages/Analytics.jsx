@@ -1,5 +1,5 @@
 // trustdubai-admin/src/pages/Analytics.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 
 /* ============================================================================
@@ -15,7 +15,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState(30) // 7 | 30 | 90
   const [isFull, setIsFull] = useState(false)
+  const [scale, setScale] = useState(1)
   const rootRef = useRef(null)
+  const contentRef = useRef(null)
 
   const [kpi, setKpi] = useState({ views: 0, viewsChg: 0, unique: 0, uniqueChg: 0, leadViews: 0, leadChg: 0, sponsorImp: 0, sponsorChg: 0 })
   const [trend, setTrend] = useState([])
@@ -41,6 +43,25 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }, [])
 
   useEffect(() => { loadAll() }, [range])
+
+  // Fullscreen: scale content so the whole dashboard fits one screen — no scroll
+  useLayoutEffect(() => {
+    if (!isFull) { setScale(1); return }
+    const calc = () => {
+      const el = contentRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      const availH = window.innerHeight - top - 14
+      const h = el.scrollHeight
+      const s = h > 0 ? Math.min(1, availH / h) : 1
+      setScale(s > 0.2 ? s : 1)
+    }
+    calc()
+    const t1 = setTimeout(calc, 80)
+    const t2 = setTimeout(calc, 300)
+    window.addEventListener('resize', calc)
+    return () => { window.removeEventListener('resize', calc); clearTimeout(t1); clearTimeout(t2) }
+  }, [isFull, vw, loading, trend, feed, topCos, countries, devices, leadCats, sources, sponsor])
 
   function toggleFull() {
     const el = rootRef.current
@@ -339,11 +360,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const mainSplit = (mobile || tablet) ? '1fr' : '1.6fr 1fr'
 
   return (
-    <div ref={rootRef} style={{ background: C.bg, minHeight: '100%', fontFamily: F, color: C.t1, padding: mobile ? 12 : 20, position: 'relative' }}>
+    <div ref={rootRef} style={{ background: C.bg, minHeight: '100%', fontFamily: F, color: C.t1, padding: mobile ? 12 : 20, position: 'relative', ...(isFull ? { height: '100vh', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}) }}>
       <style>{`@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}} .an-scroll::-webkit-scrollbar{width:6px}.an-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:99px}`}</style>
 
       {/* HEADER */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18, flexWrap: 'wrap', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => setPage && setPage('dashboard')} title="Back"
             style={{ width: 38, height: 38, borderRadius: 11, border: `1px solid ${C.line}`, background: C.soft, color: C.t1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -379,6 +400,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           Loading analytics…
         </div>
       ) : (
+        <div style={isFull ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' } : { display: 'contents' }}>
+        <div ref={contentRef} style={isFull ? { width: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: 'top center' } : { display: 'contents' }}>
         <>
           {/* KPI ROW */}
           <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
@@ -586,6 +609,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
           </div>
         </>
+        </div>
+        </div>
       )}
     </div>
   )
