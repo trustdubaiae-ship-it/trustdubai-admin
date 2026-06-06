@@ -1,5 +1,5 @@
 // trustdubai-admin/src/pages/Analytics.jsx
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 
 /* ============================================================================
@@ -15,7 +15,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState(30) // 7 | 30 | 90
   const [isFull, setIsFull] = useState(false)
-  const [scale, setScale] = useState(1)
   const rootRef = useRef(null)
   const contentRef = useRef(null)
 
@@ -43,25 +42,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }, [])
 
   useEffect(() => { loadAll() }, [range])
-
-  // Fullscreen: scale content so the whole dashboard fits one screen — no scroll
-  useLayoutEffect(() => {
-    if (!isFull) { setScale(1); return }
-    const calc = () => {
-      const el = contentRef.current
-      if (!el) return
-      const top = el.getBoundingClientRect().top
-      const availH = window.innerHeight - top - 14
-      const h = el.scrollHeight
-      const s = h > 0 ? Math.min(1, availH / h) : 1
-      setScale(s > 0.2 ? s : 1)
-    }
-    calc()
-    const t1 = setTimeout(calc, 80)
-    const t2 = setTimeout(calc, 300)
-    window.addEventListener('resize', calc)
-    return () => { window.removeEventListener('resize', calc); clearTimeout(t1); clearTimeout(t2) }
-  }, [isFull, vw, loading, trend, feed, topCos, countries, devices, leadCats, sources, sponsor])
 
   function toggleFull() {
     const el = rootRef.current
@@ -334,7 +314,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     const area = `${pad},${H - 24} ${pts} ${pad + (d.length - 1) * stepX},${H - 24}`
     const ticks = mobile ? 4 : 6
     return (
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <svg width="100%" height={isFull ? '100%' : H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
         <defs>
           <linearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={C.cyan} stopOpacity="0.35" /><stop offset="100%" stopColor={C.cyan} stopOpacity="0" />
@@ -400,8 +380,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           Loading analytics…
         </div>
       ) : (
-        <div style={isFull ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' } : { display: 'contents' }}>
-        <div ref={contentRef} style={isFull ? { width: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: 'top center' } : { display: 'contents' }}>
+        <div style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden', width: '100%' } : { display: 'contents' }}>
+        <div ref={contentRef} style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14, width: '100%' } : { display: 'contents' }}>
         <>
           {/* KPI ROW */}
           <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16, flexShrink: 0 }}>
@@ -412,15 +392,15 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           </div>
 
           {/* MAIN COLUMN  |  RIGHT RAIL (AI + Live feed, full height) */}
-          <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 340px', gap: 16, alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 340px', gap: 16, alignItems: 'stretch', ...(isFull ? { flex: 1, minHeight: 0 } : {}) }}>
 
             {/* ===== MAIN COLUMN ===== */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-              <Panel glow>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, ...(isFull ? { minHeight: 0 } : {}) }}>
+              <Panel glow style={isFull ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}}>
                 <Title n="5" right={<span style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.t2 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 14, height: 3, background: C.cyan, borderRadius: 9 }} /> Views</span>
                 </span>}>Views Trend (Daily)</Title>
-                <TrendChart />
+                <div style={isFull ? { flex: 1, minHeight: 0 } : {}}><TrendChart /></div>
               </Panel>
 
               <Panel glow>
@@ -565,7 +545,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             {/* ===== END MAIN COLUMN ===== */}
 
             {/* ===== RIGHT RAIL: AI INSIGHTS + LIVE FEED (full height) ===== */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, ...(isFull ? { minHeight: 0 } : {}) }}>
               <Panel glow style={{ background: isDark ? 'linear-gradient(160deg,rgba(168,85,247,0.12),rgba(34,211,238,0.06))' : C.panel }}>
                 <Title right={<i className="ti ti-brain" style={{ fontSize: 18, color: C.purple }} />}>
                   <span style={{ letterSpacing: '0.06em', fontSize: 12, color: C.t2, fontWeight: 800 }}>AI INSIGHTS</span>
