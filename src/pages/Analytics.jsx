@@ -404,15 +404,17 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         <div ref={contentRef} style={isFull ? { width: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: 'top center' } : { display: 'contents' }}>
         <>
           {/* KPI ROW */}
-          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 16, flexShrink: 0 }}>
             <KpiCard label="Total Profile Views" value={kpi.views} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} />
             <KpiCard label="Unique Visitors (IP)" value={kpi.unique} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} />
             <KpiCard label="Lead Form Views" value={kpi.leadViews} chg={kpi.leadChg} color={C.indigo} icon="ti-forms" sparkData={trend.map(t => t.v)} />
             <KpiCard label="Sponsor Impressions" value={kpi.sponsorImp} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} />
           </div>
 
-          {/* TREND + TOP | AI + FEED */}
-          <div style={{ display: 'grid', gridTemplateColumns: mainSplit, gap: 16, marginBottom: 16 }}>
+          {/* MAIN COLUMN  |  RIGHT RAIL (AI + Live feed, full height) */}
+          <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 340px', gap: 16, alignItems: 'stretch' }}>
+
+            {/* ===== MAIN COLUMN ===== */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
               <Panel glow>
                 <Title n="5" right={<span style={{ display: 'flex', gap: 12, fontSize: 10.5, color: C.t2 }}>
@@ -440,8 +442,129 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
                   </div>
                 ))}
               </Panel>
-            </div>
 
+              {/* COUNTRY + DEVICE + LEAD CATS (inside MAIN) */}
+              <div style={{ display: 'grid', gridTemplateColumns: grid3, gap: 16 }}>
+                <Panel glow>
+                  <Title n="7">Country Breakdown</Title>
+                  {countries.length === 0 ? <Empty C={C} text="No country data yet." /> : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                      <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, ${C.indigo}, ${C.cyan}33 60%, transparent 72%)`, filter: 'blur(2px)' }} />
+                        <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', border: `1px solid ${C.cyan}55`, boxShadow: `inset 0 0 22px ${C.cyan}33` }} />
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>🌍</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 130 }}>
+                        {countries.map((c, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                            <span style={{ fontSize: 13 }}>{c.flag}</span>
+                            <span style={{ fontSize: 12, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Panel>
+
+                <Panel glow>
+                  <Title n="8">Device Breakdown</Title>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <Donut data={devices} size={120} thickness={20} />
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: C.t1 }}>{fmt(devices.reduce((s, d) => s + d.count, 0))}</span>
+                        <span style={{ fontSize: 9, color: C.t3 }}>views</span>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      {devices.map((d, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, color: C.t1, flex: 1 }}>{d.name}</span>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{d.pct}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Panel>
+
+                <Panel glow>
+                  <Title n="9">Lead Forms by Category</Title>
+                  {leadCats.length === 0 ? <Empty C={C} text="No lead-form views yet." /> : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ flexShrink: 0 }}><Donut data={leadCats} size={120} thickness={20} /></div>
+                      <div style={{ flex: 1 }}>
+                        {leadCats.map((c, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+                            <span style={{ fontSize: 11.5, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                            <span style={{ fontSize: 11.5, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
+                            <span style={{ fontSize: 10, color: C.t3 }}>({c.count})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Panel>
+              </div>
+
+              {/* SOURCES + SPONSOR (inside MAIN) */}
+              <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1.3fr', gap: 16 }}>
+                <Panel glow>
+                  <Title n="10">Top Source Pages</Title>
+                  {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
+                    <div key={i} style={{ marginBottom: i < sources.length - 1 ? 11 : 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{s.pct}%</span>
+                      </div>
+                      <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ width: `${s.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius: 99 }} />
+                      </div>
+                    </div>
+                  ))}
+                </Panel>
+
+                <Panel glow>
+                  <Title n="11">Sponsor Performance</Title>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+                    {[
+                      { l: 'IMPRESSIONS', v: sponsor.imp, c: C.purple },
+                      { l: 'CLICKS', v: sponsor.clicks, c: C.cyan },
+                      { l: 'LEADS', v: sponsor.leads, c: C.green },
+                    ].map((m, i) => (
+                      <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px' }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em' }}>{m.l}</div>
+                        <div style={{ fontSize: 19, fontWeight: 800, color: C.t1, marginTop: 3 }}>{m.v.toLocaleString()}</div>
+                        <div style={{ height: 3, background: m.c, borderRadius: 99, marginTop: 7, opacity: 0.7 }} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em', marginBottom: 9 }}>CONVERSION FUNNEL</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(() => {
+                      const imp = Math.max(1, sponsor.imp)
+                      const stages = [
+                        { l: 'Impressions', v: sponsor.imp, sub: '100%', c: C.purple },
+                        { l: 'Clicks', v: sponsor.clicks, sub: Math.round((sponsor.clicks / imp) * 100) + '%', c: C.cyan },
+                        { l: 'Leads', v: sponsor.leads, sub: Math.round((sponsor.leads / imp) * 100) + '%', c: C.green },
+                      ]
+                      return stages.map((s, i) => (
+                        <div key={i} style={{ flex: 1, background: `linear-gradient(135deg,${s.c},${s.c}aa)`, borderRadius: 10, padding: '12px 10px', color: '#fff', opacity: isDark ? 0.92 : 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.95 }}>{s.l}</div>
+                          <div style={{ fontSize: 16, fontWeight: 800, marginTop: 3 }}>{s.v.toLocaleString()}</div>
+                          <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{s.sub}</div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </Panel>
+              </div>
+            </div>
+            {/* ===== END MAIN COLUMN ===== */}
+
+            {/* ===== RIGHT RAIL: AI INSIGHTS + LIVE FEED (full height) ===== */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
               <Panel glow style={{ background: isDark ? 'linear-gradient(160deg,rgba(168,85,247,0.12),rgba(34,211,238,0.06))' : C.panel }}>
                 <Title right={<i className="ti ti-brain" style={{ fontSize: 18, color: C.purple }} />}>
@@ -459,9 +582,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
                 </div>
               </Panel>
 
-              <Panel glow>
+              <Panel glow style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <Title n="12" right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Visitors / Activity</Title>
-                <div className="an-scroll" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                <div className="an-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                   {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
                     <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
                       <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}` }}>
@@ -480,126 +603,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
                 </div>
               </Panel>
             </div>
+            {/* ===== END RIGHT RAIL ===== */}
           </div>
 
-          {/* COUNTRY + DEVICE + LEAD CATS */}
-          <div style={{ display: 'grid', gridTemplateColumns: grid3, gap: 16, marginBottom: 16 }}>
-            <Panel glow>
-              <Title n="7">Country Breakdown</Title>
-              {countries.length === 0 ? <Empty C={C} text="No country data yet." /> : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                  <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, ${C.indigo}, ${C.cyan}33 60%, transparent 72%)`, filter: 'blur(2px)' }} />
-                    <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', border: `1px solid ${C.cyan}55`, boxShadow: `inset 0 0 22px ${C.cyan}33` }} />
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>🌍</div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 130 }}>
-                    {countries.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                        <span style={{ fontSize: 13 }}>{c.flag}</span>
-                        <span style={{ fontSize: 12, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Panel>
-
-            <Panel glow>
-              <Title n="8">Device Breakdown</Title>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <Donut data={devices} size={120} thickness={20} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: C.t1 }}>{fmt(devices.reduce((s, d) => s + d.count, 0))}</span>
-                    <span style={{ fontSize: 9, color: C.t3 }}>views</span>
-                  </div>
-                </div>
-                <div style={{ flex: 1 }}>
-                  {devices.map((d, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, color: C.t1, flex: 1 }}>{d.name}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{d.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Panel>
-
-            <Panel glow>
-              <Title n="9">Lead Forms by Category</Title>
-              {leadCats.length === 0 ? <Empty C={C} text="No lead-form views yet." /> : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ flexShrink: 0 }}><Donut data={leadCats} size={120} thickness={20} /></div>
-                  <div style={{ flex: 1 }}>
-                    {leadCats.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 11.5, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-                        <span style={{ fontSize: 11.5, fontWeight: 800, color: C.t1 }}>{c.pct}%</span>
-                        <span style={{ fontSize: 10, color: C.t3 }}>({c.count})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Panel>
-          </div>
-
-          {/* SOURCES + SPONSOR */}
-          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1.3fr', gap: 16 }}>
-            <Panel glow>
-              <Title n="10">Top Source Pages</Title>
-              {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
-                <div key={i} style={{ marginBottom: i < sources.length - 1 ? 11 : 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: C.t1 }}>{s.pct}%</span>
-                  </div>
-                  <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ width: `${s.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius: 99 }} />
-                  </div>
-                </div>
-              ))}
-            </Panel>
-
-            <Panel glow>
-              <Title n="11">Sponsor Performance</Title>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
-                {[
-                  { l: 'IMPRESSIONS', v: sponsor.imp, c: C.purple },
-                  { l: 'CLICKS', v: sponsor.clicks, c: C.cyan },
-                  { l: 'LEADS', v: sponsor.leads, c: C.green },
-                ].map((m, i) => (
-                  <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px' }}>
-                    <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em' }}>{m.l}</div>
-                    <div style={{ fontSize: 19, fontWeight: 800, color: C.t1, marginTop: 3 }}>{m.v.toLocaleString()}</div>
-                    <div style={{ height: 3, background: m.c, borderRadius: 99, marginTop: 7, opacity: 0.7 }} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.06em', marginBottom: 9 }}>CONVERSION FUNNEL</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(() => {
-                  const imp = Math.max(1, sponsor.imp)
-                  const stages = [
-                    { l: 'Impressions', v: sponsor.imp, sub: '100%', c: C.purple },
-                    { l: 'Clicks', v: sponsor.clicks, sub: Math.round((sponsor.clicks / imp) * 100) + '%', c: C.cyan },
-                    { l: 'Leads', v: sponsor.leads, sub: Math.round((sponsor.leads / imp) * 100) + '%', c: C.green },
-                  ]
-                  return stages.map((s, i) => (
-                    <div key={i} style={{ flex: 1, background: `linear-gradient(135deg,${s.c},${s.c}aa)`, borderRadius: 10, padding: '12px 10px', color: '#fff', opacity: isDark ? 0.92 : 1 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.95 }}>{s.l}</div>
-                      <div style={{ fontSize: 16, fontWeight: 800, marginTop: 3 }}>{s.v.toLocaleString()}</div>
-                      <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{s.sub}</div>
-                    </div>
-                  ))
-                })()}
-              </div>
-            </Panel>
-          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 18, fontSize: 11, color: C.t2 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
