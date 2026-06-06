@@ -35,12 +35,13 @@ import SponsorSlotsPage from './pages/SponsorSlotsPage'
 import SuperAdminSettings from './pages/SuperAdminSettings'
 import BadgeManager from './pages/BadgeManager'
 import VerificationQueue from './pages/VerificationQueue'
+import Analytics from './pages/Analytics'
 
 const SAFE_TOP = 'env(safe-area-inset-top)'
 
 // All valid page keys (used to validate the URL hash on load)
 const VALID_PAGES = new Set([
-  'dashboard','control_wall','revenue_engine','inbox','companies','reviews','leads','lead_forms','distribution',
+  'dashboard','control_wall','revenue_engine','analytics','inbox','companies','reviews','leads','lead_forms','distribution',
   'categories','employees','plans','plan_features','subscription','bulk','team','team_verification',
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
@@ -233,6 +234,7 @@ export default function App() {
         {page === 'control_wall'      && <ControlWall onBack={() => goPage('dashboard')} theme={theme} embedded />}
         {page === 'dashboard'         && <Dashboard setPage={goPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
         {page === 'revenue_engine'    && <RevenueEngine setPage={goPage} theme={theme} adminData={adminData} />}
+        {page === 'analytics'         && <Analytics setPage={goPage} theme={theme} adminData={adminData} />}
         {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
