@@ -98,15 +98,19 @@ export default function Companies({ initialPlanFilter }) {
   const [discount, setDiscount] = useState(0)
   const [savingPlan, setSavingPlan] = useState(false)
   const [adminData, setAdminData] = useState(null)
+  const [portalTotal, setPortalTotal] = useState(0)
+  const [importedTotal, setImportedTotal] = useState(0)
   const [newC, setNewC] = useState({ name: '', category: '', area: '', phone: '', whatsapp: '', email: '', description: '' })
 
   useEffect(() => {
-    fetchAll()
     fetchAdminData()
     const observer = new MutationObserver(() => forceUpdate(n => n + 1))
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => observer.disconnect()
   }, [])
+
+  // Re-fetch whenever the active source changes (DB-side filter avoids the 1000-row cap)
+  useEffect(() => { fetchAll() }, [source])
 
   useEffect(() => {
     if (initialPlanFilter) { setPlanFilter(initialPlanFilter); setSource('portal') }
@@ -128,7 +132,21 @@ export default function Companies({ initialPlanFilter }) {
 
   async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase.from('companies').select('*').order('created_at', { ascending: false })
+    // Accurate totals for BOTH source cards (head count — never limited by row cap)
+    const [{ count: pTotal }, { count: iTotal }] = await Promise.all([
+      supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_imported', false),
+      supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_imported', true),
+    ])
+    setPortalTotal(pTotal || 0)
+    setImportedTotal(iTotal || 0)
+    // Load rows for the ACTIVE source only — portal=2 rows, imported up to 2000
+    const wantImported = source === 'imported'
+    const { data } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('is_imported', wantImported)
+      .order('created_at', { ascending: false })
+      .range(0, 1999)
     setCompanies(data || [])
     setLoading(false)
   }
@@ -303,8 +321,8 @@ export default function Companies({ initialPlanFilter }) {
   ]
 
   const SOURCE_CARDS = [
-    { key: 'portal',   label: 'Portal Registered', sub: 'Signed up on TrustDubai', count: portalCos.length,   color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.12)' : '#e6f4ea', icon: 'ti-user-plus' },
-    { key: 'imported', label: 'Google Imported',   sub: 'Auto-added listings',     count: importedCos.length, color: '#a16207', bg: isDark ? 'rgba(161,98,7,0.14)' : '#fef9c3', icon: 'ti-brand-google' },
+    { key: 'portal',   label: 'Portal Registered', sub: 'Signed up on TrustDubai', count: portalTotal,   color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.12)' : '#e6f4ea', icon: 'ti-user-plus' },
+    { key: 'imported', label: 'Google Imported',   sub: 'Auto-added listings',     count: importedTotal, color: '#a16207', bg: isDark ? 'rgba(161,98,7,0.14)' : '#fef9c3', icon: 'ti-brand-google' },
   ]
 
   return (
