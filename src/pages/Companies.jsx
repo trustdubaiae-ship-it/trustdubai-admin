@@ -34,6 +34,21 @@ function perfBadge(score) {
   return { color: '#888780', bg: '#f1efe8', icon: 'ti-minus' }
 }
 
+/* Source provenance badge — Google import vs Portal-registered vs Claimed import */
+function sourceBadge(c) {
+  if (!c.is_imported) return { t: 'Registered', color: '#1e8e3e', bg: '#e6f4ea', bgDark: 'rgba(30,142,62,0.18)', icon: 'ti-user-plus' }
+  if (c.claimed)      return { t: 'Claimed',    color: '#1d4ed8', bg: '#dbeafe', bgDark: 'rgba(29,78,216,0.18)',  icon: 'ti-discount-check' }
+  return                     { t: 'Google',     color: '#a16207', bg: '#fef9c3', bgDark: 'rgba(161,98,7,0.20)',   icon: 'ti-brand-google' }
+}
+
+/* Verification level chip — listed / license-verified / fully verified */
+function levelChip(c) {
+  const lv = c.verification_level || (c.is_verified ? 'full' : 'listed')
+  if (lv === 'full')    return { t: 'Fully Verified',    color: '#03C1F5' }
+  if (lv === 'license') return { t: 'License-Verified',  color: '#0f6e56' }
+  return                       { t: 'Listed',            color: '#94a3b8' }
+}
+
 function Modal({ title, onClose, children, wide }) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   return (
@@ -62,7 +77,8 @@ function Field({ label, value, onChange }) {
 export default function Companies({ initialPlanFilter }) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   const [, forceUpdate] = useState(0)
-  const [tab, setTab] = useState('approved')
+  const [source, setSource] = useState('portal')   // 'portal' | 'imported'
+  const [tab, setTab] = useState('all')             // sub-filter; meaning depends on source
   const [viewMode, setViewMode] = useState('list')
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -88,8 +104,14 @@ export default function Companies({ initialPlanFilter }) {
   }, [])
 
   useEffect(() => {
-    if (initialPlanFilter) setPlanFilter(initialPlanFilter)
+    if (initialPlanFilter) { setPlanFilter(initialPlanFilter); setSource('portal') }
   }, [initialPlanFilter])
+
+  function switchSource(s) {
+    setSource(s)
+    setTab('all')
+    if (s === 'imported') setPlanFilter('all')   // plan filter is meaningless for unmonetized imports
+  }
 
   async function fetchAdminData() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -118,7 +140,7 @@ export default function Companies({ initialPlanFilter }) {
   }
 
   async function addNew() {
-    await supabase.from('companies').insert({ ...newC, status: 'approved' })
+    await supabase.from('companies').insert({ ...newC, status: 'approved', is_imported: false })
     setAddModal(false)
     setNewC({ name: '', category: '', area: '', phone: '', whatsapp: '', email: '', description: '' })
     fetchAll()
@@ -171,9 +193,21 @@ export default function Companies({ initialPlanFilter }) {
     alert(selectedPlan === 'free' ? '✅ Plan set to Free!' : `✅ Plan saved! Accounts notified for AED ${finalTotal}.`)
   }
 
-  const pending  = companies.filter(c => c.status === 'pending' || c.status === 'under_review')
-  const approved = companies.filter(c => c.status === 'approved')
-  const baseList = tab === 'pending' ? pending : tab === 'approved' ? approved : companies
+  /* ── SOURCE SPLIT — Google-imported vs Portal-registered never mix ── */
+  const portalCos   = companies.filter(c => !c.is_imported)
+  const importedCos = companies.filter(c => c.is_imported)
+  const sourceList  = source === 'imported' ? importedCos : portalCos
+
+  /* Sub-filter within the chosen source */
+  let baseList = sourceList
+  if (source === 'portal') {
+    if (tab === 'pending')  baseList = sourceList.filter(c => c.status === 'pending' || c.status === 'under_review')
+    if (tab === 'approved') baseList = sourceList.filter(c => c.status === 'approved')
+    if (tab === 'rejected') baseList = sourceList.filter(c => c.status === 'rejected')
+  } else {
+    if (tab === 'unclaimed') baseList = sourceList.filter(c => !c.claimed)
+    if (tab === 'claimed')   baseList = sourceList.filter(c => c.claimed)
+  }
 
   let displayList = baseList
   if (planFilter !== 'all') displayList = displayList.filter(c => (c.plan || 'free') === planFilter)
@@ -205,7 +239,7 @@ export default function Companies({ initialPlanFilter }) {
   const avatarColors = ['#1a73e8', '#1e8e3e', '#d93025', '#f9a825', '#9c27b0', '#00897b']
   const avatarColor  = (name) => avatarColors[name?.charCodeAt(0) % avatarColors.length] || '#1a73e8'
 
-  // Plan counts based on current tab
+  // Plan counts based on current source+subtab list
   const planCounts = {
     all:      baseList.length,
     free:     baseList.filter(c => (c.plan || 'free') === 'free').length,
@@ -214,7 +248,7 @@ export default function Companies({ initialPlanFilter }) {
     platinum: baseList.filter(c => (c.plan || 'free') === 'platinum').length,
   }
 
-  // quick stats (based on current tab list)
+  // quick stats (based on current source+subtab list)
   const payingCount   = baseList.filter(c => (c.plan || 'free') !== 'free').length
   const perfList      = baseList.map(c => Number(c.performance_score) || 0)
   const avgPerf       = perfList.length ? (perfList.reduce((a, b) => a + b, 0) / perfList.length) : 0
@@ -222,6 +256,32 @@ export default function Companies({ initialPlanFilter }) {
     const e = formatExpiry(c.plan_expires_at)
     return e && e.days >= 0 && e.days <= 7
   }).length
+
+  // sub-tab counts (computed from full source list, before subtab filter)
+  const portalCounts = {
+    all:      portalCos.length,
+    pending:  portalCos.filter(c => c.status === 'pending' || c.status === 'under_review').length,
+    approved: portalCos.filter(c => c.status === 'approved').length,
+    rejected: portalCos.filter(c => c.status === 'rejected').length,
+  }
+  const importedCounts = {
+    all:       importedCos.length,
+    unclaimed: importedCos.filter(c => !c.claimed).length,
+    claimed:   importedCos.filter(c => c.claimed).length,
+  }
+
+  const SUBTABS = source === 'portal'
+    ? [
+        { id: 'all',      label: 'All',      count: portalCounts.all },
+        { id: 'pending',  label: 'Pending',  count: portalCounts.pending },
+        { id: 'approved', label: 'Approved', count: portalCounts.approved },
+        { id: 'rejected', label: 'Rejected', count: portalCounts.rejected },
+      ]
+    : [
+        { id: 'all',       label: 'All',       count: importedCounts.all },
+        { id: 'unclaimed', label: 'Unclaimed', count: importedCounts.unclaimed },
+        { id: 'claimed',   label: 'Claimed',   count: importedCounts.claimed },
+      ]
 
   const PLAN_CARDS = [
     { key: 'all',      label: 'All',      color: '#03C1F5', bg: isDark ? 'rgba(3,193,245,0.12)'   : '#e0f9ff' },
@@ -237,6 +297,11 @@ export default function Companies({ initialPlanFilter }) {
     { label: 'Expiring',  value: expiringCount,          icon: 'ti-clock',       color: '#f59e0b' },
   ]
 
+  const SOURCE_CARDS = [
+    { key: 'portal',   label: 'Portal Registered', sub: 'Signed up on TrustDubai', count: portalCos.length,   color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.12)' : '#e6f4ea', icon: 'ti-user-plus' },
+    { key: 'imported', label: 'Google Imported',   sub: 'Auto-added listings',     count: importedCos.length, color: '#a16207', bg: isDark ? 'rgba(161,98,7,0.14)' : '#fef9c3', icon: 'ti-brand-google' },
+  ]
+
   return (
     <div>
 
@@ -244,7 +309,9 @@ export default function Companies({ initialPlanFilter }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: text }}>Companies</h1>
-          <p style={{ fontSize: 13, color: textSub, marginTop: 4 }}>Manage all listings · {displayList.length} shown</p>
+          <p style={{ fontSize: 13, color: textSub, marginTop: 4 }}>
+            {source === 'imported' ? 'Google-imported listings' : 'Portal-registered businesses'} · {displayList.length} shown
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ display: 'flex', background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9', borderRadius: 8, padding: 3, border: '1px solid ' + borderCol }}>
@@ -262,40 +329,86 @@ export default function Companies({ initialPlanFilter }) {
         </div>
       </div>
 
-      {/* Plan Filter Cards — 5 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 12 }}>
-        {PLAN_CARDS.map(p => (
-          <div key={p.key}
-            onClick={() => setPlanFilter(p.key)}
-            style={{
-              background: planFilter === p.key ? p.bg : cardBg,
-              border: '2px solid ' + (planFilter === p.key ? p.color : borderCol),
-              borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
-              textAlign: 'center', transition: 'all 0.15s',
-              boxShadow: planFilter === p.key ? '0 4px 12px ' + p.color + '33' : 'none',
-            }}
-            onMouseEnter={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = p.color; e.currentTarget.style.transform = 'translateY(-1px)' } }}
-            onMouseLeave={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = borderCol; e.currentTarget.style.transform = 'none' } }}
-          >
-            <div style={{ fontSize: 24, fontWeight: 700, color: planFilter === p.key ? p.color : text, lineHeight: 1 }}>
-              {planCounts[p.key]}
+      {/* SOURCE TOGGLE — Portal vs Google (the two never mix) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        {SOURCE_CARDS.map(s => {
+          const active = source === s.key
+          return (
+            <div key={s.key} onClick={() => switchSource(s.key)}
+              style={{
+                background: active ? s.bg : cardBg,
+                border: '2px solid ' + (active ? s.color : borderCol),
+                borderRadius: 14, padding: '14px 18px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.15s',
+                boxShadow: active ? '0 4px 14px ' + s.color + '26' : 'none',
+              }}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.borderColor = s.color; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.borderColor = borderCol; e.currentTarget.style.transform = 'none' } }}
+            >
+              <div style={{ width: 46, height: 46, borderRadius: 12, background: s.color + (isDark ? '26' : '1e'), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className={'ti ' + s.icon} style={{ fontSize: 22, color: s.color }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: active ? s.color : text }}>{s.label}</div>
+                <div style={{ fontSize: 11, color: textSub, marginTop: 1 }}>{s.sub}</div>
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: active ? s.color : text, lineHeight: 1, flexShrink: 0 }}>{s.count}</div>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: planFilter === p.key ? p.color : textSub, marginTop: 5 }}>
-              {p.label}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {/* Quick stats row */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        {QUICK_STATS.map(s => (
-          <div key={s.label} style={{ flex: 1, minWidth: 120, background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: '1px solid ' + borderCol, borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 9 }}>
-            <i className={'ti ' + s.icon} style={{ fontSize: 16, color: s.color }} />
-            <div><span style={{ fontSize: 15, fontWeight: 700, color: text }}>{s.value}</span> <span style={{ fontSize: 11, color: textSub }}>{s.label}</span></div>
+      {/* Plan filter + quick stats — only for Portal (imports are unmonetized) */}
+      {source === 'portal' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 12 }}>
+            {PLAN_CARDS.map(p => (
+              <div key={p.key}
+                onClick={() => setPlanFilter(p.key)}
+                style={{
+                  background: planFilter === p.key ? p.bg : cardBg,
+                  border: '2px solid ' + (planFilter === p.key ? p.color : borderCol),
+                  borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+                  textAlign: 'center', transition: 'all 0.15s',
+                  boxShadow: planFilter === p.key ? '0 4px 12px ' + p.color + '33' : 'none',
+                }}
+                onMouseEnter={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = p.color; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+                onMouseLeave={e => { if (planFilter !== p.key) { e.currentTarget.style.borderColor = borderCol; e.currentTarget.style.transform = 'none' } }}
+              >
+                <div style={{ fontSize: 24, fontWeight: 700, color: planFilter === p.key ? p.color : text, lineHeight: 1 }}>
+                  {planCounts[p.key]}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: planFilter === p.key ? p.color : textSub, marginTop: 5 }}>
+                  {p.label}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            {QUICK_STATS.map(s => (
+              <div key={s.label} style={{ flex: 1, minWidth: 120, background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: '1px solid ' + borderCol, borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 9 }}>
+                <i className={'ti ' + s.icon} style={{ fontSize: 16, color: s.color }} />
+                <div><span style={{ fontSize: 15, fontWeight: 700, color: text }}>{s.value}</span> <span style={{ fontSize: 11, color: textSub }}>{s.label}</span></div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Imported claim-summary strip */}
+      {source === 'imported' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, background: isDark ? 'rgba(161,98,7,0.10)' : '#fffbeb', border: '1px solid ' + (isDark ? 'rgba(161,98,7,0.25)' : '#fde68a'), borderRadius: 10, padding: '11px 16px', flexWrap: 'wrap' }}>
+          <i className="ti ti-info-circle" style={{ fontSize: 17, color: '#a16207' }} />
+          <span style={{ fontSize: 12.5, color: text }}>
+            Imported listings show publicly as <strong>Listed</strong> until an owner claims them.
+          </span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 14, fontSize: 12.5, flexWrap: 'wrap' }}>
+            <span style={{ color: textSub }}>Unclaimed: <strong style={{ color: text }}>{importedCounts.unclaimed}</strong></span>
+            <span style={{ color: textSub }}>Claimed: <strong style={{ color: '#1d4ed8' }}>{importedCounts.claimed}</strong></span>
+          </span>
+        </div>
+      )}
 
       {/* Search Filter */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' }}>
@@ -306,15 +419,11 @@ export default function Companies({ initialPlanFilter }) {
         />
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid ' + borderCol }}>
-        {[
-          { id: 'pending',  label: 'Pending (' + pending.length + ')' },
-          { id: 'approved', label: 'Approved (' + approved.length + ')' },
-          { id: 'all',      label: 'All (' + companies.length + ')' },
-        ].map(t => (
+      {/* Sub-tabs (status for Portal · claim-state for Google) */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid ' + borderCol, flexWrap: 'wrap' }}>
+        {SUBTABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '10px 20px', border: 'none', background: 'none', borderBottom: tab === t.id ? '2px solid #03C1F5' : '2px solid transparent', color: tab === t.id ? '#03C1F5' : textSub, fontWeight: 500, fontSize: 13, cursor: 'pointer' }}>
-            {t.label}
+            {t.label} ({t.count})
           </button>
         ))}
       </div>
@@ -338,7 +447,7 @@ export default function Companies({ initialPlanFilter }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: bgRow }}>
-                    {['Company', 'Category', 'Plan', 'Performance', 'Expiry', 'Status', 'Actions'].map(h => (
+                    {['Company', 'Category', 'Source', 'Plan', 'Performance', 'Expiry', 'Status', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol }}>{h}</th>
                     ))}
                   </tr>
@@ -349,6 +458,7 @@ export default function Companies({ initialPlanFilter }) {
                     const expiry = formatExpiry(c.plan_expires_at)
                     const score  = Number(c.performance_score) || 0
                     const pb     = perfBadge(score)
+                    const sb     = sourceBadge(c)
                     const isTop  = c.id === topPerformerId
                     return (
                       <tr key={c.id} style={{ borderBottom: '1px solid ' + borderCol, cursor: 'pointer' }}
@@ -365,11 +475,16 @@ export default function Companies({ initialPlanFilter }) {
                                 {c.name}
                                 {isTop && <span style={{ fontSize: 10, color: '#0f6e56', background: isDark ? 'rgba(29,158,117,0.2)' : '#e1f5ee', padding: '1px 6px', borderRadius: 99 }}>Top</span>}
                               </div>
-                              <div style={{ fontSize: 11, color: textMuted }}>{c.owner_email}</div>
+                              <div style={{ fontSize: 11, color: textMuted }}>{c.owner_email || (c.is_imported ? 'No owner yet' : '—')}</div>
                             </div>
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: textSub }} onClick={() => setDetailC(c)}>{c.category}</td>
+                        <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? sb.bgDark : sb.bg, color: sb.color, fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 99 }}>
+                            <i className={'ti ' + sb.icon} style={{ fontSize: 12 }} /> {sb.t}
+                          </span>
+                        </td>
                         <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
                           <span style={{ background: plan.bg, color: plan.color, fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>{plan.label}</span>
                         </td>
@@ -411,6 +526,7 @@ export default function Companies({ initialPlanFilter }) {
                 const expiry = formatExpiry(c.plan_expires_at)
                 const score  = Number(c.performance_score) || 0
                 const pb     = perfBadge(score)
+                const sb     = sourceBadge(c)
                 return (
                   <div key={c.id} onClick={() => setDetailC(c)}
                     style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 14, padding: 18, cursor: 'pointer', transition: 'all 0.15s' }}
@@ -429,6 +545,9 @@ export default function Companies({ initialPlanFilter }) {
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, flexShrink: 0 }}>{plan.label}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? sb.bgDark : sb.bg, color: sb.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8 }}>
+                        <i className={'ti ' + sb.icon} style={{ fontSize: 12 }} /> {sb.t}
+                      </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8 }}>
                         <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)}
                       </span>
@@ -461,12 +580,16 @@ export default function Companies({ initialPlanFilter }) {
                 const plan = PLANS[c.plan || 'free'] || PLANS.free
                 const score = Number(c.performance_score) || 0
                 const pb = perfBadge(score)
+                const sb = sourceBadge(c)
                 return (
                   <div key={c.id} onClick={() => setDetailC(c)}
-                    style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, padding: 16, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}
+                    style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, padding: 16, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', position: 'relative' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = plan.color; e.currentTarget.style.transform = 'scale(1.03)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = borderCol; e.currentTarget.style.transform = 'scale(1)' }}
                   >
+                    <span title={sb.t} style={{ position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: isDark ? sb.bgDark : sb.bg, color: sb.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i className={'ti ' + sb.icon} style={{ fontSize: 11 }} />
+                    </span>
                     <div style={{ width: 52, height: 52, borderRadius: 14, background: avatarColor(c.name) + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: avatarColor(c.name), margin: '0 auto 10px' }}>
                       {initials(c.name)}
                     </div>
@@ -495,6 +618,8 @@ export default function Companies({ initialPlanFilter }) {
             const expiry = formatExpiry(detailC.plan_expires_at)
             const score  = Number(detailC.performance_score) || 0
             const pb     = perfBadge(score)
+            const sb     = sourceBadge(detailC)
+            const lc     = levelChip(detailC)
             const isDk   = document.documentElement.getAttribute('data-theme') === 'dark'
             const t  = isDk ? '#f1f5f9' : '#0f172a'
             const ts = isDk ? '#94a3b8' : '#64748b'
@@ -515,6 +640,10 @@ export default function Companies({ initialPlanFilter }) {
                     <div style={{ fontSize: 18, fontWeight: 700, color: t }}>{detailC.name}</div>
                     <div style={{ fontSize: 13, color: ts, marginTop: 2 }}>{detailC.category}{detailC.area ? ' · ' + detailC.area : ''}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDk ? sb.bgDark : sb.bg, color: sb.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>
+                        <i className={'ti ' + sb.icon} style={{ fontSize: 12 }} /> {sb.t}
+                      </span>
+                      <span style={{ background: isDk ? 'rgba(255,255,255,0.06)' : '#f1f5f9', color: lc.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{lc.t}</span>
                       <span style={{ background: plan.bg, color: plan.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{plan.label}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDk ? pb.color + '22' : pb.bg, color: pb.color, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>
                         <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)} performance
@@ -532,6 +661,7 @@ export default function Companies({ initialPlanFilter }) {
                   )}
                 </div>
                 <div style={{ marginBottom: 16 }}>
+                  {row('Source', detailC.is_imported ? (detailC.claimed ? 'Google import · Claimed by owner' : 'Google import · Unclaimed') : 'Portal registration')}
                   {row('Phone', detailC.phone)}
                   {row('WhatsApp', detailC.whatsapp)}
                   {row('Email', detailC.email || detailC.owner_email)}
