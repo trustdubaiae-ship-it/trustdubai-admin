@@ -132,21 +132,23 @@ export default function Companies({ initialPlanFilter }) {
 
   async function fetchAll() {
     setLoading(true)
-    // Accurate totals for BOTH source cards (head count — never limited by row cap)
-    const [{ count: pTotal }, { count: iTotal }] = await Promise.all([
-      supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_imported', false),
+    // Imported side = strictly is_imported true. Portal side = everything else
+    // (false OR null OR empty) so no real company is ever missed.
+    // is.true / not.is.true work for BOTH boolean and text columns reliably.
+    const [{ count: iTotal }, { count: total }] = await Promise.all([
       supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_imported', true),
+      supabase.from('companies').select('*', { count: 'exact', head: true }),
     ])
-    setPortalTotal(pTotal || 0)
-    setImportedTotal(iTotal || 0)
-    // Load rows for the ACTIVE source only — portal=2 rows, imported up to 2000
-    const wantImported = source === 'imported'
-    const { data } = await supabase
-      .from('companies')
-      .select('*')
-      .eq('is_imported', wantImported)
-      .order('created_at', { ascending: false })
-      .range(0, 1999)
+    const imp = iTotal || 0
+    const all = total || 0
+    setImportedTotal(imp)
+    setPortalTotal(Math.max(all - imp, 0))
+    // Load rows for the ACTIVE source only — avoids the 1000-row cap
+    let qy = supabase.from('companies').select('*')
+    if (source === 'imported') qy = qy.eq('is_imported', true)
+    else                       qy = qy.not('is_imported', 'eq', true)   // false / null / empty
+    const { data, error } = await qy.order('created_at', { ascending: false }).range(0, 1999)
+    if (error) console.error('Companies fetch error:', error)
     setCompanies(data || [])
     setLoading(false)
   }
