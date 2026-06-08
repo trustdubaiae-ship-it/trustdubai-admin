@@ -34,16 +34,21 @@ function perfBadge(score) {
   return { color: '#888780', bg: '#f1efe8', icon: 'ti-minus' }
 }
 
+/* Robust boolean parse — DB columns may be boolean OR text ("true"/"false") */
+function truthy(v) {
+  return v === true || v === 1 || v === 'true' || v === 't' || v === '1' || v === 'yes'
+}
+
 /* Source provenance badge — Google import vs Portal-registered vs Claimed import */
 function sourceBadge(c) {
-  if (!c.is_imported) return { t: 'Registered', color: '#1e8e3e', bg: '#e6f4ea', bgDark: 'rgba(30,142,62,0.18)', icon: 'ti-user-plus' }
-  if (c.claimed)      return { t: 'Claimed',    color: '#1d4ed8', bg: '#dbeafe', bgDark: 'rgba(29,78,216,0.18)',  icon: 'ti-discount-check' }
+  if (!truthy(c.is_imported)) return { t: 'Registered', color: '#1e8e3e', bg: '#e6f4ea', bgDark: 'rgba(30,142,62,0.18)', icon: 'ti-user-plus' }
+  if (truthy(c.claimed))      return { t: 'Claimed',    color: '#1d4ed8', bg: '#dbeafe', bgDark: 'rgba(29,78,216,0.18)',  icon: 'ti-discount-check' }
   return                     { t: 'Google',     color: '#a16207', bg: '#fef9c3', bgDark: 'rgba(161,98,7,0.20)',   icon: 'ti-brand-google' }
 }
 
 /* Verification level chip — listed / license-verified / fully verified */
 function levelChip(c) {
-  const lv = c.verification_level || (c.is_verified ? 'full' : 'listed')
+  const lv = c.verification_level || (truthy(c.is_verified) ? 'full' : 'listed')
   if (lv === 'full')    return { t: 'Fully Verified',    color: '#03C1F5' }
   if (lv === 'license') return { t: 'License-Verified',  color: '#0f6e56' }
   return                       { t: 'Listed',            color: '#94a3b8' }
@@ -194,8 +199,8 @@ export default function Companies({ initialPlanFilter }) {
   }
 
   /* ── SOURCE SPLIT — Google-imported vs Portal-registered never mix ── */
-  const portalCos   = companies.filter(c => !c.is_imported)
-  const importedCos = companies.filter(c => c.is_imported)
+  const portalCos   = companies.filter(c => !truthy(c.is_imported))
+  const importedCos = companies.filter(c => truthy(c.is_imported))
   const sourceList  = source === 'imported' ? importedCos : portalCos
 
   /* Sub-filter within the chosen source */
@@ -205,8 +210,8 @@ export default function Companies({ initialPlanFilter }) {
     if (tab === 'approved') baseList = sourceList.filter(c => c.status === 'approved')
     if (tab === 'rejected') baseList = sourceList.filter(c => c.status === 'rejected')
   } else {
-    if (tab === 'unclaimed') baseList = sourceList.filter(c => !c.claimed)
-    if (tab === 'claimed')   baseList = sourceList.filter(c => c.claimed)
+    if (tab === 'unclaimed') baseList = sourceList.filter(c => !truthy(c.claimed))
+    if (tab === 'claimed')   baseList = sourceList.filter(c => truthy(c.claimed))
   }
 
   let displayList = baseList
@@ -266,8 +271,8 @@ export default function Companies({ initialPlanFilter }) {
   }
   const importedCounts = {
     all:       importedCos.length,
-    unclaimed: importedCos.filter(c => !c.claimed).length,
-    claimed:   importedCos.filter(c => c.claimed).length,
+    unclaimed: importedCos.filter(c => !truthy(c.claimed)).length,
+    claimed:   importedCos.filter(c => truthy(c.claimed)).length,
   }
 
   const SUBTABS = source === 'portal'
@@ -499,13 +504,13 @@ export default function Companies({ initialPlanFilter }) {
                         <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             <span style={{ background: c.status === 'approved' ? (isDark ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDark ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: c.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>{c.status}</span>
-                            {c.is_verified && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>✓ Verified</span>}
+                            {truthy(c.is_verified) && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>✓ Verified</span>}
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                             <button onClick={e => { e.stopPropagation(); setEditC(c) }} style={btn('#03C1F5', isDark ? 'rgba(3,193,245,0.1)' : '#e0f9ff')}>Edit</button>
-                            <button onClick={e => { e.stopPropagation(); update(c.id, { is_verified: !c.is_verified }) }} style={btn('#1e8e3e', isDark ? 'rgba(30,142,62,0.1)' : '#e6f4ea')}>{c.is_verified ? 'Unverify' : 'Verify'}</button>
+                            <button onClick={e => { e.stopPropagation(); update(c.id, { is_verified: !truthy(c.is_verified) }) }} style={btn('#1e8e3e', isDark ? 'rgba(30,142,62,0.1)' : '#e6f4ea')}>{truthy(c.is_verified) ? 'Unverify' : 'Verify'}</button>
                             <button onClick={e => { e.stopPropagation(); openPlanModal(c) }} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: plan.bg, color: plan.color }}>Plan</button>
                             <button onClick={e => { e.stopPropagation(); del(c.id) }} style={btn('#ef4444', isDark ? 'rgba(239,68,68,0.1)' : '#fce8e6')}>Del</button>
                           </div>
@@ -552,7 +557,7 @@ export default function Companies({ initialPlanFilter }) {
                         <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)}
                       </span>
                       <span style={{ background: c.status === 'approved' ? (isDark ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDark ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: c.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>{c.status}</span>
-                      {c.is_verified && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>✓ Verified</span>}
+                      {truthy(c.is_verified) && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>✓ Verified</span>}
                       {expiry && c.plan !== 'free' && <span style={{ background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', color: expiry.color, fontSize: 11, padding: '2px 8px', borderRadius: 8 }}>{expiry.label}</span>}
                     </div>
                     {c.avg_rating > 0 && (
@@ -649,7 +654,7 @@ export default function Companies({ initialPlanFilter }) {
                         <i className={'ti ' + pb.icon} style={{ fontSize: 12 }} /> {score.toFixed(1)} performance
                       </span>
                       <span style={{ background: detailC.status === 'approved' ? (isDk ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDk ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: detailC.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>{detailC.status}</span>
-                      {detailC.is_verified && <span style={{ background: isDk ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>✓ Verified</span>}
+                      {truthy(detailC.is_verified) && <span style={{ background: isDk ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>✓ Verified</span>}
                     </div>
                   </div>
                   {detailC.avg_rating > 0 && (
@@ -661,7 +666,7 @@ export default function Companies({ initialPlanFilter }) {
                   )}
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  {row('Source', detailC.is_imported ? (detailC.claimed ? 'Google import · Claimed by owner' : 'Google import · Unclaimed') : 'Portal registration')}
+                  {row('Source', truthy(detailC.is_imported) ? (truthy(detailC.claimed) ? 'Google import · Claimed by owner' : 'Google import · Unclaimed') : 'Portal registration')}
                   {row('Phone', detailC.phone)}
                   {row('WhatsApp', detailC.whatsapp)}
                   {row('Email', detailC.email || detailC.owner_email)}
@@ -683,8 +688,8 @@ export default function Companies({ initialPlanFilter }) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => { setDetailC(null); setEditC(detailC) }} style={{ flex: 1, padding: 10, background: '#03C1F5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>✏️ Edit</button>
                   <button onClick={() => { setDetailC(null); openPlanModal(detailC) }} style={{ flex: 1, padding: 10, background: plan.bg, color: plan.color, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>💎 Change Plan</button>
-                  <button onClick={() => { update(detailC.id, { is_verified: !detailC.is_verified }); setDetailC(null) }} style={{ flex: 1, padding: 10, background: isDk ? 'rgba(30,142,62,0.15)' : '#e6f4ea', color: '#1e8e3e', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                    {detailC.is_verified ? '✓ Unverify' : '✓ Verify'}
+                  <button onClick={() => { update(detailC.id, { is_verified: !truthy(detailC.is_verified) }); setDetailC(null) }} style={{ flex: 1, padding: 10, background: isDk ? 'rgba(30,142,62,0.15)' : '#e6f4ea', color: '#1e8e3e', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                    {truthy(detailC.is_verified) ? '✓ Unverify' : '✓ Verify'}
                   </button>
                   {detailC.slug && (
                     <button onClick={() => window.open('https://trustdubai.ae/' + detailC.slug, '_blank')} style={{ padding: '10px 14px', background: isDk ? 'rgba(255,255,255,0.05)' : '#f1f5f9', color: ts, border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>🔗 View</button>
