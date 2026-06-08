@@ -544,7 +544,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       </div>
 
       {/* LEAD FUNNEL + SPONSOR + HOURLY HEATMAP + SOURCES */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : tablet ? '1fr 1fr' : '1fr 1.1fr 1.1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : tablet ? '1fr 1fr' : '1fr 1.1fr 1.1fr 1fr', gap: 14, marginBottom: 14, alignItems: 'start' }}>
         <Panel glow>
           <Title>Lead Funnel</Title>
           {(() => {
@@ -585,7 +585,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           <Title>Hourly Visitor Heatmap</Title>
           {heatmap.length === 0 ? <Empty C={C} text="No data yet." /> : (
             <div style={{ display: 'flex', gap: 6 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 7.5, color: C.t3, paddingTop: 14, paddingBottom: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 7.5, color: C.t3, paddingTop: 16, height: 192 }}>
                 {['00','06','12','18','23'].map(h => <span key={h}>{h}</span>)}
               </div>
               <div style={{ flex: 1 }}>
@@ -594,11 +594,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
                   {DAYS.map((_, dayIdx) => (
-                    <div key={dayIdx} style={{ display: 'grid', gridTemplateRows: 'repeat(24,1fr)', gap: 1 }}>
+                    <div key={dayIdx} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                       {Array.from({ length: 24 }).map((_, h) => {
                         const cell = heatmap[dayIdx]?.[h] || { intensity: 0, count: 0 }
                         const op = cell.intensity === 0 ? 0.06 : 0.2 + cell.intensity * 0.8
-                        return <div key={h} title={`${DAYS[dayIdx]} ${h}:00 — ${cell.count} visits`} style={{ aspectRatio: '1', borderRadius: 2, background: C.indigo, opacity: op }} />
+                        return <div key={h} title={`${DAYS[dayIdx]} ${h}:00 — ${cell.count} visits`} style={{ height: 7, borderRadius: 2, background: C.indigo, opacity: op }} />
                       })}
                     </div>
                   ))}
