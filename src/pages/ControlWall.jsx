@@ -176,6 +176,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
 
     const reviews   = (await safe(() => supabase.from('reviews').select('*').limit(5000).then(r=>r.data))) || []
     const companies = (await safe(() => supabase.from('companies').select('*').limit(5000).then(r=>r.data))) || []
+    const approvedCompanies = companies.filter(c => norm(c.status) === 'approved')   // live listings only (incl. Google-imported)
     const customers = (await safe(() => supabase.from('customers').select('id,created_at,nationality,gender').limit(10000).then(r=>r.data))) || []
     const leads     = (await safe(() => supabase.from('lead_submissions').select('*').limit(10000).then(r=>r.data))) || []
     const distRows  = await safe(() => supabase.from('lead_distributions').select('id').limit(10000).then(r=>r.data))
@@ -234,16 +235,16 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
     const heatMax=Math.max(1,...heat.flat())
 
     // categories (company service categories)
-    const svcMap={}; companies.forEach(c=>{ const cat=pick(c,['category','service_category','industry']); if(cat){const k=String(cat); svcMap[k]=(svcMap[k]||0)+1} })
+    const svcMap={}; approvedCompanies.forEach(c=>{ const cat=pick(c,['category','service_category','industry']); if(cat){const k=String(cat); svcMap[k]=(svcMap[k]||0)+1} })
     const SVC_C=['#22c55e','#8b5cf6','#3b82f6','#f59e0b','#94a3b8']
     const svcCats=Object.entries(svcMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([label,value],i)=>({label,value,color:SVC_C[i%SVC_C.length]}))
 
     // businesses growth 6mo
     const months=[]; const nd=new Date()
-    for(let i=5;i>=0;i--){ const dt=new Date(nd.getFullYear(),nd.getMonth()-i,1); const key=dt.toISOString().slice(0,7); months.push({ label:dt.toLocaleDateString('en-AE',{month:'short'})+' '+String(dt.getFullYear()).slice(2), value:companies.filter(c=>(c.created_at||'').slice(0,7)<=key).length }) }
+    for(let i=5;i>=0;i--){ const dt=new Date(nd.getFullYear(),nd.getMonth()-i,1); const key=dt.toISOString().slice(0,7); months.push({ label:dt.toLocaleDateString('en-AE',{month:'short'})+' '+String(dt.getFullYear()).slice(2), value:approvedCompanies.filter(c=>(c.created_at||'').slice(0,7)<=key).length }) }
 
     // plan revenue
-    const planCount={free:0,silver:0,gold:0,platinum:0}; companies.forEach(c=>{ const p=norm(c.plan)||'free'; if(planCount[p]!==undefined)planCount[p]++ })
+    const planCount={free:0,silver:0,gold:0,platinum:0}; approvedCompanies.forEach(c=>{ const p=norm(c.plan)||'free'; if(planCount[p]!==undefined)planCount[p]++ })
     const planRev={}; Object.keys(planCount).forEach(p=>planRev[p]=planCount[p]*(PLAN_PRICES[p]||0))
     const mrr=Object.values(planRev).reduce((a,b)=>a+b,0)
 
@@ -284,11 +285,11 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
     const unreadEnq=inbox ? inbox.filter(m=>m.is_read===false||m.read===false).length : sc.new
 
     setD({
-      stats:{ totalReviews:reviews.length, totalBusinesses:companies.length, totalUsers:customers.length, avgRating, enquiries:totalLeads,
+      stats:{ totalReviews:reviews.length, totalBusinesses:approvedCompanies.length, totalUsers:customers.length, avgRating, enquiries:totalLeads,
               totalLeads, conversion, hot, followDue, distributed, mrr },
-      delta:{ reviews:pctChange(inWin(reviews,30,0),inWin(reviews,60,30)), business:pctChange(inWin(companies,30,0),inWin(companies,60,30)),
+      delta:{ reviews:pctChange(inWin(reviews,30,0),inWin(reviews,60,30)), business:pctChange(inWin(approvedCompanies,30,0),inWin(approvedCompanies,60,30)),
               users:pctChange(inWin(customers,30,0),inWin(customers,60,30)), leads:pctChange(inWin(leads,30,0),inWin(leads,60,30)) },
-      spark:{ reviews:dailyN(reviews), business:dailyN(companies), users:dailyN(customers), leads:dailyN(leads) },
+      spark:{ reviews:dailyN(reviews), business:dailyN(approvedCompanies), users:dailyN(customers), leads:dailyN(leads) },
       rTrend, trend, sources, cats, pipeline, statusDonut, topCompanies, heat, heatMax, svcCats, months,
       planCount, planRev, mrr, avgScore, scoreBuckets, convBySrc, recentReviews, act:act.slice(0,5), liveLeads, hasDemo, areas,
       pendingReviews, reportedReviews, pendingBiz, unreadEnq, followToday: leads.filter(l=>{const f=pick(l,['follow_up_date']); if(!f)return false; return startOfDay(new Date(f)).getTime()===today}).length,
