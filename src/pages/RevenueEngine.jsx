@@ -286,6 +286,7 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
   const [leads, setLeads] = useState([])
   const [companies, setCompanies] = useState([])
   const [distCount, setDistCount] = useState(0)
+  const [approvedCount, setApprovedCount] = useState(0)
   const [clock, setClock] = useState(new Date())
 
   const adminName = pick(adminData || {}, ['name', 'full_name', 'fullName', 'email']) || 'Admin'
@@ -298,14 +299,16 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
   const load = async () => {
     setLoading(true)
     try {
-      const [{ data: ld }, { data: cp }, dist] = await Promise.all([
+      const [{ data: ld }, { data: cp }, dist, appr] = await Promise.all([
         supabase.from('lead_submissions').select('*').order('created_at', { ascending: false }).limit(5000),
         supabase.from('companies').select('*').limit(5000),
         supabase.from('lead_distributions').select('*', { count: 'exact', head: true }),
+        supabase.from('companies').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
       ])
       setLeads(ld || [])
       setCompanies(cp || [])
       setDistCount(dist?.count || 0)
+      setApprovedCount(appr?.count || 0)
     } catch (e) {
       console.error('RevenueEngine load error', e)
     }
@@ -417,6 +420,9 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       const key = PLAN_META.find(p => k.includes(p.key))?.key || 'free'
       planCounts[key]++
     })
+    // free = exact approved total − paid plans (uncapped by the 1000-row fetch limit)
+    const approvedTotal = approvedCount || approvedCompanies.length
+    planCounts.free = Math.max(0, approvedTotal - (planCounts.silver + planCounts.gold + planCounts.platinum))
     const planRev = PLAN_META.map(p => ({
       ...p, count: planCounts[p.key], revenue: planCounts[p.key] * (PLAN_PRICES[p.key] || 0),
     }))
@@ -458,9 +464,9 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       distCount, distChange: 0,
       sources, types, trend, pipeline, statusDonut, convBySrc, topCompanies,
       avgScore, scoreBuckets, planRev, mrr, heat, heatMax, activity, insights,
-      newCount: statusCount.new, companyCount: approvedCompanies.length,
+      newCount: statusCount.new, companyCount: approvedTotal,
     }
-  }, [leads, companies, distCount])
+  }, [leads, companies, distCount, approvedCount])
 
   const heatColor = (cnt) => {
     if (cnt === 0) return 'var(--re-track)'

@@ -177,6 +177,8 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
     const reviews   = (await safe(() => supabase.from('reviews').select('*').limit(5000).then(r=>r.data))) || []
     const companies = (await safe(() => supabase.from('companies').select('*').limit(5000).then(r=>r.data))) || []
     const approvedCompanies = companies.filter(c => norm(c.status) === 'approved')   // live listings only (incl. Google-imported)
+    // exact approved count via head-count query (NOT capped by the 1000-row fetch limit)
+    const approvedCountExact = (await safe(() => supabase.from('companies').select('id',{count:'exact',head:true}).eq('status','approved').then(r=>r.count))) || approvedCompanies.length
     const customers = (await safe(() => supabase.from('customers').select('id,created_at,nationality,gender').limit(10000).then(r=>r.data))) || []
     const leads     = (await safe(() => supabase.from('lead_submissions').select('*').limit(10000).then(r=>r.data))) || []
     const distRows  = await safe(() => supabase.from('lead_distributions').select('id').limit(10000).then(r=>r.data))
@@ -245,6 +247,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
 
     // plan revenue
     const planCount={free:0,silver:0,gold:0,platinum:0}; approvedCompanies.forEach(c=>{ const p=norm(c.plan)||'free'; if(planCount[p]!==undefined)planCount[p]++ })
+    planCount.free = Math.max(0, approvedCountExact - (planCount.silver+planCount.gold+planCount.platinum))   // free = exact total − paid (uncapped)
     const planRev={}; Object.keys(planCount).forEach(p=>planRev[p]=planCount[p]*(PLAN_PRICES[p]||0))
     const mrr=Object.values(planRev).reduce((a,b)=>a+b,0)
 
@@ -285,7 +288,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
     const unreadEnq=inbox ? inbox.filter(m=>m.is_read===false||m.read===false).length : sc.new
 
     setD({
-      stats:{ totalReviews:reviews.length, totalBusinesses:approvedCompanies.length, totalUsers:customers.length, avgRating, enquiries:totalLeads,
+      stats:{ totalReviews:reviews.length, totalBusinesses:approvedCountExact, totalUsers:customers.length, avgRating, enquiries:totalLeads,
               totalLeads, conversion, hot, followDue, distributed, mrr },
       delta:{ reviews:pctChange(inWin(reviews,30,0),inWin(reviews,60,30)), business:pctChange(inWin(approvedCompanies,30,0),inWin(approvedCompanies,60,30)),
               users:pctChange(inWin(customers,30,0),inWin(customers,60,30)), leads:pctChange(inWin(leads,30,0),inWin(leads,60,30)) },
