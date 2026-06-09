@@ -3,15 +3,9 @@ import { supabase } from '../supabase'
 
 /* =========================================================================
    TrustDubai Admin — REVENUE ENGINE (CRM Dashboard)
-   - Light + Dark mode (driven by `theme` prop)
-   - Fully responsive: phone / tablet / iPad / laptop / desktop / large PC
-   - 100% real data (lead_submissions, lead_distributions, companies)
-   - Resilient: auto-detects status/source/temperature values & column names
    ========================================================================= */
 
-/* ---- PLAN PRICES (monthly, AED) — EDIT THESE to your real pricing ------- */
 const PLAN_PRICES = { free: 0, silver: 99, gold: 299, platinum: 599 }
-/* ------------------------------------------------------------------------ */
 
 const PLAN_META = [
   { key: 'free',     label: 'Free',     color: '#3b82f6' },
@@ -32,7 +26,6 @@ const STATUS_ORDER = [
 const SOURCE_COLORS = ['#6366f1', '#22c55e', '#fbbf24', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444']
 const TYPE_COLORS   = ['#8b5cf6', '#3b82f6', '#22c55e', '#fbbf24', '#06b6d4', '#f97316']
 
-/* ----------------------------- helpers ---------------------------------- */
 const pick = (obj, keys) => {
   for (const k of keys) {
     if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k]
@@ -84,7 +77,6 @@ const parseBudget = (raw) => {
   if (raw == null) return 0
   const digits = String(raw).replace(/[, ]/g, '').match(/\d+/g)
   if (!digits) return 0
-  // take the largest number found (handles ranges like "20000-50000")
   return Math.max(...digits.map(Number))
 }
 
@@ -106,7 +98,6 @@ const fmtAED = (n) => {
   return `${v}`
 }
 
-/* AI Lead Score (0–100) — option (b): temperature + recency + source + budget */
 const aiScore = (lead) => {
   let s = 0
   const t = normTemp(fTemp(lead))
@@ -121,7 +112,6 @@ const aiScore = (lead) => {
   return Math.min(100, s)
 }
 
-/* ------------------------------ ICONS ----------------------------------- */
 const Ic = {
   users:  'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
   refresh:'M4 4v5h5M20 20v-5h-5M5.5 9a7 7 0 0112-3.5L20 8M18.5 15a7 7 0 01-12 3.5L4 16',
@@ -131,7 +121,6 @@ const Ic = {
   money:  'M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
 }
 
-/* --------------------------- mini components ---------------------------- */
 function Donut({ data, total, centerLabel, centerSub, size = 150 }) {
   const stroke = size * 0.13
   const r = (size - stroke) / 2
@@ -311,7 +300,7 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     try {
       const [{ data: ld }, { data: cp }, dist] = await Promise.all([
         supabase.from('lead_submissions').select('*').order('created_at', { ascending: false }).limit(5000),
-        supabase.from('companies').select('*'),
+        supabase.from('companies').select('*').limit(5000),
         supabase.from('lead_distributions').select('*', { count: 'exact', head: true }),
       ])
       setLeads(ld || [])
@@ -324,7 +313,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
   }
   useEffect(() => { load() }, [])
 
-  /* ----------------------------- compute -------------------------------- */
   const m = useMemo(() => {
     const now = Date.now()
     const today = startOfDay(now)
@@ -339,7 +327,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     }).length
     const change = (cur, prev) => prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100)
 
-    // status buckets
     const statusCount = {}
     STATUS_ORDER.forEach(s => statusCount[s.key] = 0)
     leads.forEach(l => { statusCount[normStatus(fStatus(l))]++ })
@@ -351,7 +338,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       return normStatus(fStatus(l)) === 'won' && t >= d60 && t < d30
     }).length
 
-    // temperature
     const hot = leads.filter(l => normTemp(fTemp(l)) === 'hot').length
     const hot30 = leads.filter(l => normTemp(fTemp(l)) === 'hot' && fCreated(l) && new Date(fCreated(l)).getTime() >= d30).length
     const hotPrev = leads.filter(l => {
@@ -359,7 +345,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       return normTemp(fTemp(l)) === 'hot' && t >= d60 && t < d30
     }).length
 
-    // follow-ups
     let dueToday = 0, overdue = 0, followDue = 0
     leads.forEach(l => {
       const f = fFollow(l)
@@ -372,19 +357,16 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       else if (fd < td) { overdue++; followDue++ }
     })
 
-    // sources
     const srcMap = {}
     leads.forEach(l => { const s = normSource(fSource(l)); srcMap[s] = (srcMap[s] || 0) + 1 })
     const sources = Object.entries(srcMap).sort((a, b) => b[1] - a[1])
       .map(([label, value], i) => ({ label, value, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }))
 
-    // project types
     const typeMap = {}
     leads.forEach(l => { const t = fType(l); if (t) { const k = String(t); typeMap[k] = (typeMap[k] || 0) + 1 } })
     const types = Object.entries(typeMap).sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([label, value], i) => ({ label, value, color: TYPE_COLORS[i % TYPE_COLORS.length] }))
 
-    // trend (last 30 days)
     const trend = []
     for (let i = 29; i >= 0; i--) {
       const day = startOfDay(now - i * 86400000)
@@ -396,25 +378,21 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       trend.push({ v, label: day })
     }
 
-    // pipeline funnel
     const pipeline = STATUS_ORDER.filter(s => s.key !== 'lost').map(s => ({
       label: s.key === 'won' ? 'Won / Lost' : s.label,
       value: s.key === 'won' ? statusCount.won + statusCount.lost : statusCount[s.key],
       color: s.color,
     }))
 
-    // lead status donut
     const statusDonut = STATUS_ORDER.map(s => ({ label: s.label, value: statusCount[s.key], color: s.color }))
       .filter(s => s.value > 0)
 
-    // conversion by source (won / total per source)
     const convBySrc = sources.slice(0, 5).map(s => {
       const t = leads.filter(l => normSource(fSource(l)) === s.label).length
       const w = leads.filter(l => normSource(fSource(l)) === s.label && normStatus(fStatus(l)) === 'won').length
       return { label: s.label, value: t ? Math.round((w / t) * 100) : 0, color: s.color }
     })
 
-    // top companies by leads
     const compMap = {}
     leads.forEach(l => { const c = fComp(l); if (c) compMap[c] = (compMap[c] || 0) + 1 })
     const cNameById = {}
@@ -422,7 +400,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     const topCompanies = Object.entries(compMap).sort((a, b) => b[1] - a[1]).slice(0, 5)
       .map(([id, value]) => ({ label: cNameById[id] || `Company #${id}`, value }))
 
-    // AI scores
     const scores = leads.map(aiScore)
     const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
     const scoreBuckets = [
@@ -431,10 +408,11 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       { label: 'Cold (0-49)',  value: scores.filter(s => s < 50).length, color: '#3b82f6' },
     ]
 
-    // plan revenue
+    // plan revenue (count only approved / live listings)
+    const approvedCompanies = companies.filter(c => norm(pick(c, ['status'])) === 'approved')
     const planCounts = {}
     PLAN_META.forEach(p => planCounts[p.key] = 0)
-    companies.forEach(c => {
+    approvedCompanies.forEach(c => {
       const k = norm(cPlan(c))
       const key = PLAN_META.find(p => k.includes(p.key))?.key || 'free'
       planCounts[key]++
@@ -444,7 +422,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     }))
     const mrr = planRev.reduce((a, p) => a + p.revenue, 0)
 
-    // follow-up heatmap (last 5 weeks x 7 days, by count)
     const heat = []
     for (let wk = 4; wk >= 0; wk--) {
       const row = []
@@ -462,13 +439,11 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     }
     const heatMax = Math.max(1, ...heat.flat())
 
-    // live activity (recent leads)
     const activity = leads.slice(0, 6).map(l => ({
       text: `New lead from ${normSource(fSource(l))}`,
       time: timeAgo(fCreated(l)),
     }))
 
-    // AI insights (rule-based, real numbers)
     const insights = []
     if (sources[0]) insights.push(`${sources[0].label} is your top lead source (${Math.round((sources[0].value / (total || 1)) * 100)}%). Keep your budget focused there.`)
     if (overdue > 0) insights.push(`You have ${overdue} overdue follow-up${overdue > 1 ? 's' : ''}. Clearing these can directly lift conversion.`)
@@ -483,7 +458,7 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
       distCount, distChange: 0,
       sources, types, trend, pipeline, statusDonut, convBySrc, topCompanies,
       avgScore, scoreBuckets, planRev, mrr, heat, heatMax, activity, insights,
-      newCount: statusCount.new,
+      newCount: statusCount.new, companyCount: approvedCompanies.length,
     }
   }, [leads, companies, distCount])
 
@@ -495,12 +470,10 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
     return '#22c55e'
   }
 
-  /* ------------------------------- UI ----------------------------------- */
   return (
     <div className="re-root" data-theme={isDark ? 'dark' : 'light'}>
       <style>{CSS}</style>
 
-      {/* Header */}
       <div className="re-header">
         <div>
           <h1 className="re-title">Revenue Engine <span className="re-badge">CRM</span></h1>
@@ -522,7 +495,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
         <div className="re-loading">Loading your CRM data…</div>
       ) : (
         <>
-          {/* KPI cards */}
           <div className="re-kpis">
             <KPI icon={Ic.users}  tint="#6366f1" label="Total Leads"          value={m.total}             change={m.totalChange} />
             <KPI icon={Ic.refresh} tint="#3b82f6" label="Conversion Rate"     value={`${m.conversion}%`}  change={m.convChange} />
@@ -532,7 +504,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
             <KPI icon={Ic.money}  tint="#fbbf24" label="Est. Monthly Revenue" value={`AED ${fmtAED(m.mrr)}`} change={m.totalChange} sub="(from plans)" />
           </div>
 
-          {/* Row: funnel + source donut + trend + follow-ups */}
           <div className="re-grid re-grid-4">
             <Card title="Pipeline Funnel">
               <Funnel stages={m.pipeline} />
@@ -564,7 +535,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
             </Card>
           </div>
 
-          {/* Row: top companies + project types + heatmap */}
           <div className="re-grid re-grid-3">
             <Card title="Top Companies by Leads" action={{ label: 'View All', fn: () => setPage && setPage('companies') }}>
               <HBars rows={m.topCompanies} />
@@ -594,13 +564,12 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
             </Card>
           </div>
 
-          {/* Plan revenue */}
           <Card title="Plan Revenue (Monthly)">
             <div className="re-plan-grid">
               <div className="re-plan-total">
                 <span className="re-plan-total-label">Total Estimated MRR</span>
                 <span className="re-plan-total-num">AED {fmtAED(m.mrr)}</span>
-                <span className="re-plan-total-sub">across {companies.length} companies</span>
+                <span className="re-plan-total-sub">across {m.companyCount} companies</span>
               </div>
               {m.planRev.map(p => (
                 <div className="re-plan-card" key={p.key}>
@@ -615,7 +584,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
             </div>
           </Card>
 
-          {/* Bottom: AI score + status donut + conversion by source + geographic */}
           <div className="re-grid re-grid-4">
             <Card title="AI Lead Score Distribution">
               <div className="re-score">
@@ -641,7 +609,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
             </Card>
           </div>
 
-          {/* Live activity */}
           <Card title="Live Activity">
             <div className="re-activity">
               {m.activity.length === 0 && <div className="re-empty">No recent activity</div>}
@@ -660,7 +627,6 @@ export default function RevenueEngine({ setPage, theme = 'dark', adminData }) {
   )
 }
 
-/* ---------------------------- card + KPI -------------------------------- */
 function Card({ title, action, children }) {
   return (
     <div className="re-card">
@@ -691,7 +657,6 @@ function KPI({ icon, tint, label, value, change, sub }) {
   )
 }
 
-/* ------------------------------- STYLES -------------------------------- */
 const CSS = `
 .re-root{
   --re-blue:#6366f1; --re-up:#22c55e; --re-down:#ef4444;
@@ -711,8 +676,6 @@ const CSS = `
   --re-track:#eef2f6; --re-hover:#f3f4f6;
   color:var(--re-text);
 }
-
-/* header */
 .re-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
 .re-title{font-size:clamp(20px,2.4vw,28px);font-weight:800;margin:0;display:flex;align-items:center;gap:10px;}
 .re-badge{font-size:11px;font-weight:700;letter-spacing:.5px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:3px 9px;border-radius:6px;}
@@ -725,10 +688,7 @@ const CSS = `
   padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;}
 .re-refresh:hover{background:var(--re-hover);}
 .re-refresh:disabled{opacity:.6;cursor:default;}
-
 .re-loading{padding:60px;text-align:center;color:var(--re-muted);}
-
-/* KPIs */
 .re-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px;}
 .re-kpi{background:var(--re-card);border:1px solid var(--re-border);border-radius:16px;padding:16px;transition:.15s;}
 .re-kpi:hover{transform:translateY(-2px);border-color:var(--re-blue);}
@@ -742,38 +702,26 @@ const CSS = `
 .re-kpi-change.up{color:var(--re-up);}
 .re-kpi-change.down{color:var(--re-down);}
 .re-kpi-change.muted{color:var(--re-muted);font-weight:600;}
-
-/* grids */
 .re-grid{display:grid;gap:14px;margin-bottom:18px;}
 .re-grid-4{grid-template-columns:repeat(4,1fr);}
 .re-grid-3{grid-template-columns:repeat(3,1fr);}
-
-/* card */
 .re-card{background:var(--re-card);border:1px solid var(--re-border);border-radius:16px;padding:18px;display:flex;flex-direction:column;}
 .re-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;}
 .re-card-title{font-size:14.5px;font-weight:700;margin:0;}
 .re-card-action{background:none;border:none;color:var(--re-blue);font-size:12.5px;font-weight:600;cursor:pointer;}
 .re-card-action:hover{text-decoration:underline;}
 .re-card-body{flex:1;}
-
-/* donut */
 .re-donut-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .re-donut-num{font-size:22px;font-weight:800;fill:var(--re-text);}
 .re-donut-sub{font-size:11px;fill:var(--re-muted);}
 .re-donut{flex-shrink:0;}
-
-/* legend */
 .re-legend{display:flex;flex-direction:column;gap:8px;flex:1;min-width:130px;}
 .re-legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;}
 .re-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0;}
 .re-legend-label{flex:1;color:var(--re-muted);}
 .re-legend-val{font-weight:700;}
 .re-legend-val em{color:var(--re-muted);font-style:normal;font-weight:500;font-size:11px;}
-
-/* line */
 .re-line{display:block;}
-
-/* funnel */
 .re-funnel{display:flex;flex-direction:column;gap:12px;}
 .re-funnel-row{display:flex;flex-direction:column;gap:5px;}
 .re-funnel-bar-wrap{display:flex;justify-content:center;}
@@ -782,8 +730,6 @@ const CSS = `
 .re-funnel-label{color:var(--re-muted);font-weight:600;}
 .re-funnel-val{font-weight:700;}
 .re-funnel-val em{color:var(--re-muted);font-style:normal;font-weight:500;}
-
-/* follow-ups */
 .re-follow{display:flex;gap:10px;margin-bottom:14px;}
 .re-follow-box{flex:1;border:1px solid var(--re-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;
   align-items:center;gap:2px;cursor:pointer;background:var(--re-card2);transition:.15s;}
@@ -796,8 +742,6 @@ const CSS = `
 .re-insights-head{font-size:12.5px;font-weight:700;margin-bottom:8px;}
 .re-insight{font-size:12px;color:var(--re-muted);margin:0 0 7px;line-height:1.5;}
 .re-insight:last-child{margin-bottom:0;}
-
-/* hbars */
 .re-hbars{display:flex;flex-direction:column;gap:12px;}
 .re-hbar-row{display:flex;align-items:center;gap:10px;font-size:13px;}
 .re-hbar-rank{width:18px;color:var(--re-muted);font-weight:700;flex-shrink:0;}
@@ -805,22 +749,16 @@ const CSS = `
 .re-hbar-track{flex:1;height:8px;background:var(--re-track);border-radius:5px;overflow:hidden;}
 .re-hbar-fill{height:100%;border-radius:5px;transition:width .5s;}
 .re-hbar-val{font-weight:700;width:34px;text-align:right;flex-shrink:0;}
-
-/* vbars */
 .re-vbars{display:flex;align-items:flex-end;justify-content:space-around;gap:8px;height:170px;padding-top:10px;}
 .re-vbar-col{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;height:100%;justify-content:flex-end;}
 .re-vbar-num{font-size:12px;font-weight:700;}
 .re-vbar-track{width:60%;max-width:40px;flex:1;display:flex;align-items:flex-end;}
 .re-vbar-fill{width:100%;border-radius:6px 6px 0 0;min-height:4px;transition:height .5s;}
 .re-vbar-label{font-size:11px;color:var(--re-muted);font-weight:600;text-align:center;}
-
-/* gauge / score */
 .re-score{display:flex;flex-direction:column;align-items:center;gap:14px;}
 .re-gauge-num{font-size:30px;font-weight:800;}
 .re-gauge-sub{font-size:11px;fill:var(--re-muted);}
 .re-score .re-legend{width:100%;}
-
-/* heatmap */
 .re-heat{display:flex;flex-direction:column;gap:4px;}
 .re-heat-days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:10px;color:var(--re-muted);text-align:center;margin-bottom:2px;}
 .re-heat-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
@@ -828,8 +766,6 @@ const CSS = `
 .re-heat-legend{display:flex;gap:14px;justify-content:center;margin-top:10px;font-size:11px;color:var(--re-muted);}
 .re-heat-legend span{display:flex;align-items:center;gap:5px;}
 .re-heat-legend i{width:10px;height:10px;border-radius:3px;}
-
-/* plan revenue */
 .re-plan-grid{display:grid;grid-template-columns:1.3fr repeat(4,1fr);gap:14px;}
 .re-plan-total{background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:14px;padding:18px;color:#fff;display:flex;flex-direction:column;gap:4px;justify-content:center;}
 .re-plan-total-label{font-size:12px;opacity:.85;}
@@ -841,46 +777,34 @@ const CSS = `
 .re-plan-name{font-weight:700;font-size:13.5px;}
 .re-plan-rev{font-size:20px;font-weight:800;}
 .re-plan-count{font-size:11.5px;color:var(--re-muted);}
-
-/* collecting */
 .re-collecting{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 12px;height:100%;}
 .re-collecting-icon{font-size:34px;margin-bottom:8px;opacity:.7;}
 .re-collecting-title{font-weight:700;font-size:14px;margin:0 0 6px;}
 .re-collecting-sub{font-size:12px;color:var(--re-muted);margin:0;line-height:1.5;max-width:220px;}
-
-/* activity */
 .re-activity{display:flex;flex-direction:column;gap:0;}
 .re-activity-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--re-border);font-size:13px;}
 .re-activity-row:last-child{border-bottom:none;}
 .re-activity-dot{width:8px;height:8px;border-radius:50%;background:var(--re-up);flex-shrink:0;}
 .re-activity-text{flex:1;}
 .re-activity-time{color:var(--re-muted);font-size:11.5px;}
-
 .re-empty{color:var(--re-muted);font-size:13px;text-align:center;padding:20px;}
-
-/* ===================== RESPONSIVE BREAKPOINTS ===================== */
-/* large desktop / big PC */
 @media(min-width:1600px){
   .re-root{max-width:1700px;margin:0 auto;}
 }
-/* laptop / small desktop */
 @media(max-width:1280px){
   .re-grid-4{grid-template-columns:repeat(2,1fr);}
   .re-plan-grid{grid-template-columns:1fr repeat(2,1fr);}
 }
-/* iPad / tablet landscape */
 @media(max-width:1024px){
   .re-kpis{grid-template-columns:repeat(3,1fr);}
   .re-grid-3{grid-template-columns:repeat(2,1fr);}
 }
-/* tablet portrait */
 @media(max-width:820px){
   .re-kpis{grid-template-columns:repeat(2,1fr);}
   .re-grid-3{grid-template-columns:1fr;}
   .re-plan-grid{grid-template-columns:repeat(2,1fr);}
   .re-plan-total{grid-column:1 / -1;}
 }
-/* phone */
 @media(max-width:560px){
   .re-grid-4{grid-template-columns:1fr;}
   .re-header{flex-direction:column;}
