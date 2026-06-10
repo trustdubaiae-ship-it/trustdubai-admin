@@ -10,6 +10,8 @@ import { supabase } from '../supabase'
    Props: setPage, theme, adminData
 ============================================================================ */
 
+const REFRESH_MS = 60000 // auto-refresh every 60s (silent, no spinner)
+
 export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const isDark = theme !== 'light'
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1400)
@@ -19,8 +21,10 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [scale, setScale] = useState(1)
   const [clock, setClock] = useState('')
   const [catView, setCatView] = useState('all') // category filter for Top Categories
+  const [lastSync, setLastSync] = useState(null) // when data was last refreshed
   const rootRef = useRef(null)
   const contentRef = useRef(null)
+  const rangeRef = useRef(range) // always-fresh range for the polling timer
 
   const [kpi, setKpi] = useState({
     views: 0, viewsChg: 0, unique: 0, uniqueChg: 0, leadViews: 0, leadChg: 0,
@@ -40,6 +44,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [insights, setInsights] = useState([])
   const [recommendation, setRecommendation] = useState('')
   const [realtime, setRealtime] = useState(0)
+  const [supply, setSupply] = useState({ total: 0, verified: 0, claimed: 0, members: 0, listed: 0, plans: { free: 0, silver: 0, gold: 0, platinum: 0 } })
 
   const mobile = vw < 760
   const tablet = vw >= 760 && vw < 1200
@@ -54,7 +59,20 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs); clearInterval(ci) }
   }, [])
 
-  useEffect(() => { loadAll() }, [range])
+  // Initial load + reload when range changes (shows spinner)
+  useEffect(() => { rangeRef.current = range; loadAll() }, [range])
+
+  // AUTO-REFRESH: silently re-fetch every REFRESH_MS, and when the tab regains focus.
+  // Silent = no full-screen spinner, just fresh numbers + "Updated" timestamp.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return // skip when tab hidden
+      loadAll(true)
+    }, REFRESH_MS)
+    const onFocus = () => loadAll(true)
+    window.addEventListener('focus', onFocus)
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
+  }, [])
 
   useLayoutEffect(() => {
     if (!isFull) { setScale(1); return }
@@ -95,7 +113,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   function timeAgo(d) {
     const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000)
     if (s < 60) return s + 's ago'
-    if (s < 3600) return Math.floor(s / 60) + ' sec ago'.replace('sec', 'min')
+    if (s < 3600) return Math.floor(s / 60) + ' min ago'
     if (s < 86400) return Math.floor(s / 3600) + ' hr ago'
     return Math.floor(s / 86400) + 'd ago'
   }
@@ -106,12 +124,13 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
   }
 
-  async function loadAll() {
-    setLoading(true)
+  async function loadAll(silent = false) {
+    if (!silent) setLoading(true)
     try {
+      const r = rangeRef.current
       const now = new Date()
-      const since = new Date(now.getTime() - range * 864e5).toISOString()
-      const prevSince = new Date(now.getTime() - range * 2 * 864e5).toISOString()
+      const since = new Date(now.getTime() - r * 864e5).toISOString()
+      const prevSince = new Date(now.getTime() - r * 2 * 864e5).toISOString()
 
       const [
         { data: pv }, { data: pvPrev }, { data: lfv }, { data: lfvPrev },
@@ -125,7 +144,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         supabase.from('sponsor_analytics').select('company_id, event_type, source_page, created_at, lead_name').gte('created_at', since).order('created_at', { ascending: false }),
         supabase.from('sponsor_analytics').select('id, event_type, created_at').gte('created_at', prevSince).lt('created_at', since),
         supabase.from('lead_submissions').select('id, status, created_at, follow_up_date').gte('created_at', since),
-        supabase.from('companies').select('id, name, area, category'),
+        supabase.from('companies').select('id, name, area, category').limit(5000),
         supabase.from('visitor_sessions').select('visitor_ip, country, page_count, duration_sec, started_at').gte('started_at', since),
         supabase.from('visitor_sessions').select('id, visitor_ip').gte('started_at', prevSince).lt('started_at', since),
       ])
@@ -174,7 +193,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
       // Trend (daily)
       const buckets = {}
-      for (let i = range - 1; i >= 0; i--) buckets[new Date(now.getTime() - i * 864e5).toISOString().slice(0, 10)] = 0
+      for (let i = r - 1; i >= 0; i--) buckets[new Date(now.getTime() - i * 864e5).toISOString().slice(0, 10)] = 0
       views.forEach(v => { const k = (v.visited_at || '').slice(0, 10); if (k in buckets) buckets[k]++ })
       setTrend(Object.entries(buckets).map(([k, v]) => ({ label: k, v })))
 
@@ -288,6 +307,30 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         ? `Increase exposure for top-performing listings in ${catArr[0].name}${catArr[1] ? ' and ' + catArr[1].name : ''} categories.`
         : 'Onboard more verified companies to boost category coverage and lead flow.')
 
+      // ---- Platform Supply (company composition) — counts via head:true (no 1000-row cap) ----
+      const supBase = () => supabase.from('companies').select('*', { count: 'exact', head: true }).eq('status', 'approved')
+      const [tot, ver, clm, mem, lst, pFree, pSilver, pGold, pPlat] = await Promise.all([
+        supBase(),
+        supBase().in('verification_level', ['license', 'full']),
+        supBase().eq('claimed', true),
+        supBase().or('is_imported.eq.false,claimed.eq.true'),
+        supBase().eq('is_imported', true).eq('claimed', false),
+        supBase().eq('plan', 'free'),
+        supBase().eq('plan', 'silver'),
+        supBase().eq('plan', 'gold'),
+        supBase().eq('plan', 'platinum'),
+      ])
+      setSupply({
+        total: tot.count || 0,
+        verified: ver.count || 0,
+        claimed: clm.count || 0,
+        members: mem.count || 0,
+        listed: lst.count || 0,
+        plans: { free: pFree.count || 0, silver: pSilver.count || 0, gold: pGold.count || 0, platinum: pPlat.count || 0 },
+      })
+
+      setLastSync(new Date())
+
     } catch (e) { console.error('Analytics load error:', e) }
     finally { setLoading(false) }
   }
@@ -315,6 +358,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'
     return String(n ?? 0)
   }
+  function pctOf(n, total) { return total > 0 ? Math.round((n / total) * 100) : 0 }
   function Spark({ data, color, h = 32, w = 150 }) {
     if (!data || data.length < 2) return <div style={{ height: h }} />
     const max = Math.max(...data, 1), min = Math.min(...data), rng = Math.max(1, max - min)
@@ -443,6 +487,57 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         <KpiCard label="Growth Score" value={kpi.growth} suffix="/100" chg={0} color={C.pink} icon="ti-rocket" sub={kpi.growth >= 70 ? 'Excellent' : kpi.growth >= 40 ? 'Healthy' : 'Building'} />
       </div>
 
+      {/* PLATFORM SUPPLY — company composition (live counts) */}
+      <Panel glow style={{ marginBottom: 14 }}>
+        <Title right={<span style={{ fontSize: 9, color: C.t3 }}>Live counts · count:exact</span>}>Platform Supply</Title>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap: 10, marginBottom: 14 }}>
+          {[
+            { l: 'Total Companies', v: supply.total, c: C.cyan, icon: 'ti-building-store', sub: null },
+            { l: 'Verified', v: supply.verified, c: C.green, icon: 'ti-rosette-discount-check', sub: pctOf(supply.verified, supply.total) },
+            { l: 'Claimed', v: supply.claimed, c: C.purple, icon: 'ti-discount-check', sub: pctOf(supply.claimed, supply.total) },
+            { l: 'Active Members', v: supply.members, c: C.indigo, icon: 'ti-users-group', sub: pctOf(supply.members, supply.total) },
+            { l: 'Listed (unclaimed)', v: supply.listed, c: C.amber, icon: 'ti-list-search', sub: pctOf(supply.listed, supply.total) },
+          ].map((m, i) => (
+            <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${m.c}22`, border: `1px solid ${m.c}55` }}>
+                  <i className={`ti ${m.icon}`} style={{ fontSize: 13, color: m.c }} />
+                </div>
+                <span style={{ fontSize: 9, fontWeight: 800, color: C.t3, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{m.l}</span>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.t1, letterSpacing: '-0.5px' }}>{fmt(m.v)}</div>
+              {m.sub != null && <div style={{ fontSize: 9.5, color: C.t3, marginTop: 2 }}>{m.sub}% of total</div>}
+            </div>
+          ))}
+        </div>
+        {/* Plan mix */}
+        <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Plan Mix</div>
+        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(2,1fr)', gap: mobile ? 0 : 18 }}>
+          {(() => {
+            const plans = [
+              { k: 'free', l: 'Free', c: C.t3 },
+              { k: 'silver', l: 'Silver', c: '#94a3b8' },
+              { k: 'gold', l: 'Gold', c: C.amber },
+              { k: 'platinum', l: 'Platinum', c: C.purple },
+            ]
+            const ptot = Math.max(1, plans.reduce((s, p) => s + (supply.plans[p.k] || 0), 0))
+            return plans.map((p, i) => {
+              const v = supply.plans[p.k] || 0
+              const pc = Math.round((v / ptot) * 100)
+              return (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontSize: 10.5, color: C.t2 }}>{p.l}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, color: C.t1 }}>{fmt(v)} <span style={{ fontSize: 9, color: C.t3 }}>({pc}%)</span></span>
+                  </div>
+                  <div style={{ height: 6, background: C.soft, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${pc}%`, height: '100%', background: p.c, borderRadius: 99 }} /></div>
+                </div>
+              )
+            })
+          })()}
+        </div>
+      </Panel>
+
       {/* TREND + AI INSIGHTS */}
       <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <Panel glow>
@@ -479,7 +574,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             <>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
                 <div style={{ position: 'relative' }}>
-                  <Donut data={countries.map((c, i) => ({ count: c.count, color: COLORS4[i % 4] === undefined ? C.indigo : [C.indigo, C.cyan, C.purple, C.amber, C.pink, C.green][i % 6] }))} size={110} thickness={18} />
+                  <Donut data={countries.map((c, i) => ({ count: c.count, color: [C.indigo, C.cyan, C.purple, C.amber, C.pink, C.green][i % 6] }))} size={110} thickness={18} />
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: C.t1 }}>{countries[0]?.pct}%</div>
                 </div>
               </div>
@@ -691,12 +786,19 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
               <button key={r} onClick={() => setRange(r)} style={{ border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 7, background: range === r ? `linear-gradient(135deg,${C.indigo},${C.purple})` : 'transparent', color: range === r ? '#fff' : C.t2 }}>{r}d</button>
             ))}
           </div>
+          <button onClick={() => loadAll(true)} title="Refresh now"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.t1, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
+            <i className="ti ti-refresh" style={{ fontSize: 15 }} /> Refresh
+          </button>
           <button onClick={exportCSV} title="Export CSV"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.t1, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
             <i className="ti ti-download" style={{ fontSize: 15 }} /> Export CSV
           </button>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.green }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} /> Live
+          </span>
+          <span style={{ fontSize: 10.5, color: C.t3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} title="Data auto-refreshes every 60s">
+            {lastSync ? `Updated ${lastSync.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai' })}` : '—'}
           </span>
           <span style={{ fontSize: 11.5, color: C.t2, fontVariantNumeric: 'tabular-nums', minWidth: 78 }}>{clock}</span>
           <button onClick={toggleFull} title="Fullscreen"
