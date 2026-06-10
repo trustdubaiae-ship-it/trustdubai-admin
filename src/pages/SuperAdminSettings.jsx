@@ -26,6 +26,13 @@ const SOCIALS = [
   { key: 'youtube',   label: 'YouTube',   icon: '▶️', ph: '@channel  or  https://youtube.com/...' },
 ]
 
+// Launch Plan — which plan the platform-wide free trial unlocks
+const LP_TIERS = [
+  { key: 'silver',   label: 'Silver' },
+  { key: 'gold',     label: 'Gold' },
+  { key: 'platinum', label: 'Platinum (recommended)' },
+]
+
 export default function SuperAdminSettings({ theme = 'dark' }) {
   const isDark = theme === 'dark'
   const [settings, setSettings] = useState({})
@@ -37,6 +44,15 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [msg, setMsg] = useState('')
+
+  // ── Launch Plan state (platform_settings) ──
+  const [lpRowId, setLpRowId]         = useState(null)
+  const [lpEnabled, setLpEnabled]     = useState(false)
+  const [lpDays, setLpDays]           = useState(30)
+  const [lpTier, setLpTier]           = useState('platinum')
+  const [lpTrialCount, setLpTrialCount] = useState(0)
+  const [lpToggling, setLpToggling]   = useState(false)
+  const [lpSaving, setLpSaving]       = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -59,6 +75,21 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     const { data: pol } = await supabase
       .from('app_settings').select('value').eq('key', 'trustdubai.policy').maybeSingle()
     setPolicyTerms(pol?.value?.terms || [])
+
+    // Launch Plan — single platform_settings row + live trial count
+    const { data: ps } = await supabase
+      .from('platform_settings').select('*')
+      .order('updated_at', { ascending: false }).limit(1).maybeSingle()
+    if (ps) {
+      setLpRowId(ps.id)
+      setLpEnabled(!!ps.launch_plan_enabled)
+      setLpDays(Number(ps.launch_plan_days) || 30)
+      setLpTier(ps.launch_plan_tier || 'platinum')
+    }
+    const { count: tc } = await supabase
+      .from('companies').select('*', { count: 'exact', head: true })
+      .gt('trial_expires_at', new Date().toISOString())
+    setLpTrialCount(tc || 0)
 
     setLoading(false)
   }, [])
@@ -130,6 +161,53 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     setMsg('Policy saved ✓ — updated everywhere'); setTimeout(() => setMsg(''), 2200)
   }
 
+  // ── Launch Plan handlers ──
+  async function loadTrialCount() {
+    const { count } = await supabase
+      .from('companies').select('*', { count: 'exact', head: true })
+      .gt('trial_expires_at', new Date().toISOString())
+    setLpTrialCount(count || 0)
+  }
+
+  async function toggleLaunch() {
+    if (!lpRowId || lpToggling) return
+    const next = !lpEnabled
+    if (!next && !confirm(
+      'Turn OFF the Launch Plan?\n\n' +
+      'Every company currently on trial reverts to its real plan immediately. ' +
+      'Real plans are never changed — you can turn it back ON anytime.'
+    )) return
+    setLpToggling(true); setMsg('')
+    const { data, error } = await supabase.from('platform_settings')
+      .update({ launch_plan_enabled: next, updated_at: new Date().toISOString() })
+      .eq('id', lpRowId).select()
+    setLpToggling(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission (is_admin check).'); return }
+    setLpEnabled(next)
+    loadTrialCount()
+    setMsg(next ? 'Launch Plan is now ON ✓' : 'Launch Plan is now OFF ✓'); setTimeout(() => setMsg(''), 1800)
+  }
+
+  async function saveLaunch() {
+    if (!lpRowId || lpSaving) return
+    const d = Math.max(1, Math.min(365, parseInt(lpDays, 10) || 30))
+    setLpSaving(true); setMsg('')
+    const { data, error } = await supabase.from('platform_settings')
+      .update({
+        launch_plan_enabled: lpEnabled,
+        launch_plan_days: d,
+        launch_plan_tier: lpTier,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', lpRowId).select()
+    setLpSaving(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission.'); return }
+    setLpDays(d)
+    setMsg('Launch Plan saved ✓'); setTimeout(() => setMsg(''), 1800)
+  }
+
   const txt  = isDark ? '#f0fdf4' : '#0f172a'
   const txt2 = isDark ? '#94a3b8' : '#64748b'
   const txt3 = isDark ? '#64748b' : '#94a3b8'
@@ -160,7 +238,88 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
         .set-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }
         @media (max-width:860px){ .set-grid{ grid-template-columns:1fr; } }
         .set-policy-grid { display:grid; grid-template-columns:1fr; gap:10px; }
+        .lp-row { display:flex; gap:12px; flex-wrap:wrap; }
+        .lp-row > div { flex:1 1 150px; min-width:140px; }
       `}</style>
+
+      {/* ───────── LAUNCH PLAN (platform-wide free trial control) ───────── */}
+      <div style={{ ...card, marginBottom: 16, border: `0.5px solid ${lpEnabled ? GREEN : cardBorder}` }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: isDark ? 'rgba(29,158,117,0.18)' : 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>🚀</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: txt }}>Launch Plan</div>
+              <div style={{ fontSize: 11.5, color: txt3, marginTop: 1 }}>Platform-wide free trial for newly claimed companies</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 99, whiteSpace: 'nowrap',
+            background: lpEnabled ? 'rgba(29,158,117,0.16)' : (isDark ? '#30363d' : '#f1f5f9'),
+            color: lpEnabled ? GREEN : txt3 }}>
+            {lpEnabled ? '● Active' : '○ Off'}
+          </span>
+        </div>
+
+        {/* master toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          background: isDark ? '#0d1117' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+          borderRadius: 11, padding: '12px 14px', margin: '14px 0' }}>
+          <div style={{ minWidth: 0, paddingRight: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: txt }}>{lpEnabled ? 'Trial is running' : 'Trial is paused'}</div>
+            <div style={{ fontSize: 11, color: txt3, marginTop: 2, lineHeight: 1.45 }}>
+              {lpEnabled
+                ? 'New members who claim their company get full access automatically.'
+                : 'Turn ON to grant the trial to newly claimed companies.'}
+            </div>
+          </div>
+          <button onClick={toggleLaunch} disabled={lpToggling || !lpRowId}
+            style={{ position: 'relative', width: 52, height: 30, borderRadius: 99, border: 'none', flexShrink: 0,
+              cursor: (lpToggling || !lpRowId) ? 'default' : 'pointer',
+              background: lpEnabled ? GREEN : (isDark ? '#30363d' : '#cbd5e1'), opacity: lpToggling ? 0.6 : 1, transition: 'background 0.2s' }}>
+            <span style={{ position: 'absolute', top: 3, left: lpEnabled ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s' }} />
+          </button>
+        </div>
+
+        {/* days + tier */}
+        <div className="lp-row" style={{ marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: txt2, marginBottom: 6 }}>Trial length (days)</div>
+            <input type="number" min="1" max="365" value={lpDays}
+              onChange={e => setLpDays(e.target.value)}
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, ...inputBase }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: txt2, marginBottom: 6 }}>Unlocks plan</div>
+            <select value={lpTier} onChange={e => setLpTier(e.target.value)}
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, ...inputBase }}>
+              {LP_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* live trial count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: isDark ? 'rgba(29,158,117,0.1)' : 'rgba(29,158,117,0.08)',
+          border: `1px solid ${isDark ? 'rgba(29,158,117,0.3)' : 'rgba(29,158,117,0.25)'}`, borderRadius: 9, padding: '10px 13px', marginBottom: 14 }}>
+          <span style={{ fontSize: 15 }}>🚀</span>
+          <div style={{ fontSize: 12.5, color: txt2 }}>
+            <b style={{ color: GREEN }}>{lpTrialCount}</b> {lpTrialCount === 1 ? 'company is' : 'companies are'} on an active trial right now
+          </div>
+          <button onClick={loadTrialCount}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: GREEN, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+            Refresh
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button onClick={saveLaunch} disabled={lpSaving || !lpRowId}
+            style={{ padding: '9px 20px', background: GREEN, color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700,
+              cursor: (lpSaving || !lpRowId) ? 'not-allowed' : 'pointer', opacity: lpSaving ? 0.6 : 1 }}>
+            {lpSaving ? 'Saving…' : 'Save settings'}
+          </button>
+          <span style={{ fontSize: 11, color: txt3 }}>
+            Turning OFF reverts everyone on trial instantly — real plans are never touched.
+          </span>
+        </div>
+      </div>
 
       <div className="set-grid">
 
