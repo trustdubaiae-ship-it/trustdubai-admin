@@ -37,6 +37,7 @@ import BadgeManager from './pages/BadgeManager'
 import VerificationQueue from './pages/VerificationQueue'
 import Analytics from './pages/Analytics'
 import ClaimRequests from './pages/ClaimRequests'
+import DuplicateClaims from './pages/DuplicateClaims'
 
 const SAFE_TOP = 'env(safe-area-inset-top)'
 
@@ -46,7 +47,7 @@ const VALID_PAGES = new Set([
   'categories','employees','plans','plan_features','subscription','bulk','team','team_verification',
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
-  'notifications','sponsor_slots','settings','badges_manager','claim_requests',
+  'notifications','sponsor_slots','settings','badges_manager','claim_requests','duplicate_claims',
 ])
 
 // Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
@@ -254,6 +255,7 @@ export default function App() {
         {page === 'applications'      && <Applications />}
         {page === 'verification'      && <VerificationQueue theme={theme} adminData={adminData} />}
         {page === 'claim_requests'    && <ClaimRequests />}
+        {page === 'duplicate_claims'  && <DuplicateClaims />}
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
         {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}
         {page === 'users'             && isSuperAdmin && <Users />}
