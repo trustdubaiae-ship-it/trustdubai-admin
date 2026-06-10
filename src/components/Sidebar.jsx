@@ -12,17 +12,23 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
 
   // Live pending claim-request count for the sidebar badge
   const [claimPending, setClaimPending] = useState(0)
+  // Live conflict (duplicate/hijack) count for the Duplicate Watch badge
+  const [conflictCount, setConflictCount] = useState(0)
   useEffect(() => {
     let active = true
-    async function loadClaimCount() {
-      const { count } = await supabase
+    async function loadCounts() {
+      const { count: pending } = await supabase
         .from('claim_requests')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending')
-      if (active) setClaimPending(count || 0)
+      const { count: conflicts } = await supabase
+        .from('claim_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('conflict', true)
+      if (active) { setClaimPending(pending || 0); setConflictCount(conflicts || 0) }
     }
-    loadClaimCount()
-    const t = setInterval(loadClaimCount, 60000)   // refresh every 60s
+    loadCounts()
+    const t = setInterval(loadCounts, 60000)   // refresh every 60s
     return () => { active = false; clearInterval(t) }
   }, [])
 
@@ -43,6 +49,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { group: 'verification', icon: 'ti-shield-check', label: 'Verification', show: true, children: [
       { id: 'applications',      icon: 'ti-file-description',   label: 'Applications',    show: true, badge: '3', badgeColor: '#f87171' },
       { id: 'claim_requests',    icon: 'ti-discount-check',     label: 'Claim Requests',  show: true, badge: claimPending > 0 ? String(claimPending) : null, badgeColor: '#f59e0b' },
+      { id: 'duplicate_claims',  icon: 'ti-copy',               label: 'Duplicate Watch', show: true, badge: conflictCount > 0 ? String(conflictCount) : null, badgeColor: '#ef4444' },
       { id: 'verification',      icon: 'ti-shield-check',       label: 'Company Verify',  show: true },
       { id: 'team_verification', icon: 'ti-user-check',         label: 'Team Verify',     show: true },
       { id: 'doc_verification',  icon: 'ti-file-certificate',   label: 'Doc Verify',      show: true },
