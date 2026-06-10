@@ -130,9 +130,10 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
   const [stats, setStats] = useState({
     reviews:0, companies:0, customers:0, enquiries:0, avgRating:'0.0',
     pendingReviews:0, pendingBiz:0, reportedReviews:0, unreadEnquiries:0,
+    claimed:0, newlyJoined:0,
   })
-  const [delta, setDelta] = useState({ reviews:0, companies:0, customers:0, enquiries:0, rating:0 })
-  const [spark, setSpark] = useState({ reviews:[], companies:[], customers:[], enquiries:[], rating:[] })
+  const [delta, setDelta] = useState({ reviews:0, companies:0, customers:0, enquiries:0, rating:0, newlyJoined:0 })
+  const [spark, setSpark] = useState({ reviews:[], companies:[], customers:[], enquiries:[], rating:[], claimed:[], newlyJoined:[] })
   const [reviewSeries, setReviewSeries] = useState([])
   const [catSegments, setCatSegments] = useState([])
   const [recentReviews, setRecentReviews] = useState([])
@@ -157,8 +158,9 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
         { count: cReviews }, { count: cCompanies }, { count: cCustomers },
         { count: cEnquiries }, { data: ratingRows },
         { count: pendReviews }, { count: pendBiz },
+        { count: cClaimed },
         { data: revRows }, { data: coRows }, { data: custRows }, { data: enqRows },
-        { data: recentRev }, { data: catRows },
+        { data: recentRev }, { data: catRows }, { data: claimedRows },
       ] = await Promise.all([
         supabase.from('reviews').select('*',{count:'exact',head:true}).eq('is_approved',true),
         supabase.from('companies').select('*',{count:'exact',head:true}).eq('status','approved'),
@@ -167,12 +169,14 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
         supabase.from('reviews').select('rating').eq('is_approved',true),
         supabase.from('reviews').select('*',{count:'exact',head:true}).eq('is_approved',false),
         supabase.from('company_applications').select('*',{count:'exact',head:true}).eq('status','pending'),
+        supabase.from('companies').select('*',{count:'exact',head:true}).eq('claimed',true),
         supabase.from('reviews').select('created_at,rating').gte('created_at', iso(60)),
         supabase.from('companies').select('created_at').eq('status','approved').gte('created_at', iso(190)),
         supabase.from('customers').select('created_at,nationality,gender').gte('created_at', iso(60)),
         supabase.from('lead_submissions').select('created_at').gte('created_at', iso(60)),
         supabase.from('reviews').select('id,reviewer_name,rating,review_text,created_at,companies(name,category)').eq('is_approved',true).order('created_at',{ascending:false}).limit(5),
         supabase.from('companies').select('category').eq('status','approved'),
+        supabase.from('companies').select('created_at').eq('claimed',true).gte('created_at', iso(60)),
       ])
 
       const avg = ratingRows?.length ? (ratingRows.reduce((s,r)=>s+r.rating,0)/ratingRows.length).toFixed(1) : '0.0'
@@ -188,6 +192,10 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
       const dCust = pctChange(inWin(custRows,30,0), inWin(custRows,60,30))
       const dEnq = pctChange(inWin(enqRows,30,0), inWin(enqRows,60,30))
       const dCo = pctChange(inWin(coRows,30,0), inWin(coRows,60,30))
+
+      // Newly joined = approved companies created in last 7 days
+      const newly7 = inWin(coRows,7,0)
+      const dNewly = pctChange(inWin(coRows,7,0), inWin(coRows,14,7))
 
       // sparklines: daily counts last 14 days
       const dailyCounts = (rows) => {
@@ -252,12 +260,14 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
         enquiries: cEnquiries||0, avgRating: avg,
         pendingReviews: pendReviews||0, pendingBiz: pendBiz||0,
         reportedReviews: 0, unreadEnquiries: inWin(enqRows,30,0),
+        claimed: cClaimed||0, newlyJoined: newly7,
       })
-      setDelta({ reviews:dRev, companies:dCo, customers:dCust, enquiries:dEnq, rating:0 })
+      setDelta({ reviews:dRev, companies:dCo, customers:dCust, enquiries:dEnq, rating:0, newlyJoined:dNewly })
       setSpark({
         reviews: dailyCounts(revRows), companies: dailyCounts(coRows),
         customers: dailyCounts(custRows), enquiries: dailyCounts(enqRows),
         rating: rs.map(s=>s.b),
+        claimed: dailyCounts(claimedRows), newlyJoined: dailyCounts(coRows),
       })
       setRecentReviews(recentRev||[])
     } catch (e) { console.error('Dashboard fetch error:', e) }
@@ -275,7 +285,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
     row:    isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
     shadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 1px 10px rgba(0,0,0,0.05)',
     bar:    isDark ? 'rgba(255,255,255,0.06)' : '#eef2f7',
-    green:'#22c55e', blue:'#3b82f6', purple:'#a855f7', gold:'#f59e0b', cyan:'#06b6d4', pink:'#ec4899', red:'#ef4444',
+    green:'#22c55e', blue:'#3b82f6', purple:'#a855f7', gold:'#f59e0b', cyan:'#06b6d4', pink:'#ec4899', red:'#ef4444', teal:'#14b8a6',
   }
   const cardStyle = { background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'16px 18px', boxShadow:C.shadow, minWidth:0 }
   const H = ({ children, right }) => (
@@ -297,9 +307,11 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
   const STAT_CARDS = [
     { label:'Total Reviews',    value:stats.reviews,    icon:'ti-star',           color:C.green,  delta:delta.reviews,    spark:spark.reviews,    page:'reviews' },
     { label:'Total Businesses', value:stats.companies,  icon:'ti-building-store', color:C.blue,   delta:delta.companies,  spark:spark.companies,  page:'companies' },
+    { label:'Newly Joined',     value:stats.newlyJoined,icon:'ti-sparkles',       color:C.teal,   delta:delta.newlyJoined,spark:spark.newlyJoined,page:'companies', sub:'last 7 days' },
+    { label:'Claimed Companies',value:stats.claimed,    icon:'ti-discount-check', color:C.cyan,   noDelta:true,           spark:spark.claimed,    page:'companies', sub:'profiles claimed' },
     { label:'Total Users',      value:stats.customers,  icon:'ti-users',          color:C.purple, delta:delta.customers,  spark:spark.customers,  page:'users' },
     { label:'Avg. Rating',      value:stats.avgRating,  icon:'ti-star-filled',    color:C.gold,   delta:delta.rating,     spark:spark.rating,     isRating:true },
-    { label:'Enquiries',        value:stats.enquiries,  icon:'ti-headset',        color:C.cyan,   delta:delta.enquiries,  spark:spark.enquiries,  page:'leads' },
+    { label:'Enquiries',        value:stats.enquiries,  icon:'ti-headset',        color:C.red,    delta:delta.enquiries,  spark:spark.enquiries,  page:'leads' },
   ]
 
   const ALERTS = [
@@ -336,7 +348,7 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
         </div>
       </div>
 
-      {/* 5 STAT CARDS */}
+      {/* 7 STAT CARDS */}
       <div className="cc-grid-stats" style={{ marginBottom:14 }}>
         {STAT_CARDS.map((s,i) => (
           <div key={i} onClick={()=> s.page && setPage && setPage(s.page)}
@@ -356,12 +368,16 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
               {s.isRating && <span style={{ color:C.gold, fontSize:13 }}>{'★'.repeat(Math.round(parseFloat(s.value)))}</span>}
             </div>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6 }}>
-              {!s.isRating ? (
+              {s.isRating ? (
+                <span style={{ fontSize:11, color:C.text3 }}>across {stats.reviews} reviews</span>
+              ) : s.noDelta ? (
+                <span style={{ fontSize:11, color:C.text3 }}>{s.sub || ''}</span>
+              ) : (
                 <span style={{ fontSize:11, fontWeight:600, color: s.delta>=0?C.green:C.red, display:'flex', alignItems:'center', gap:2 }}>
                   <i className={`ti ${s.delta>=0?'ti-trending-up':'ti-trending-down'}`} style={{ fontSize:12 }}/>
-                  {fmtPct(s.delta)} <span style={{ color:C.text3, fontWeight:400 }}>30d</span>
+                  {fmtPct(s.delta)} <span style={{ color:C.text3, fontWeight:400 }}>{s.sub || '30d'}</span>
                 </span>
-              ) : <span style={{ fontSize:11, color:C.text3 }}>across {stats.reviews} reviews</span>}
+              )}
               <Sparkline data={s.spark} color={s.color} width={mobile?60:80} height={28}/>
             </div>
           </div>
@@ -529,12 +545,16 @@ export default function Dashboard({ setPage, setPlanFilter, theme, adminData }) 
    ==================================================================== */
 const CC_CSS = `
 .cc-root *{box-sizing:border-box;}
-.cc-grid-stats{display:grid;gap:14px;grid-template-columns:repeat(5,1fr);}
+.cc-grid-stats{display:grid;gap:14px;grid-template-columns:repeat(7,1fr);}
 .cc-grid-row2{display:grid;gap:14px;grid-template-columns:1.6fr 1fr 1fr;}
 .cc-grid-row3{display:grid;gap:14px;grid-template-columns:repeat(3,1fr);}
 .cc-grid-alerts{display:grid;gap:14px;grid-template-columns:repeat(4,1fr);}
 .cc-grid-stats>*,.cc-grid-row2>*,.cc-grid-row3>*,.cc-grid-alerts>*{min-width:0;}
 
+/* large desktop */
+@media (max-width:1500px){
+  .cc-grid-stats{grid-template-columns:repeat(4,1fr);}
+}
 /* laptop / small desktop */
 @media (max-width:1280px){
   .cc-grid-stats{grid-template-columns:repeat(3,1fr);}
