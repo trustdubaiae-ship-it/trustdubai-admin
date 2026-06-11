@@ -75,8 +75,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [])
 
-  // Fullscreen auto-resolution: scale the whole board so it fits the screen
-  // (height + width) without scrolling. Recalculates after data renders.
+  // Fullscreen auto-resolution: content fills the FULL width and is squished
+  // vertically so the whole board fits on ONE screen — no scroll, no side gaps.
   useLayoutEffect(() => {
     if (!isFull) { setScale(1); return }
     const calc = () => {
@@ -84,10 +84,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       if (!el) return
       const top = el.getBoundingClientRect().top
       const availH = window.innerHeight - top - 16
-      const availW = el.parentElement ? el.parentElement.clientWidth : window.innerWidth
-      const h = el.scrollHeight, w = el.scrollWidth
-      if (h <= 0 || w <= 0) return
-      setScale(Math.max(0.4, Math.min(1.3, Math.min(availH / h, availW / w))))
+      const h = el.scrollHeight
+      if (h <= 0) return
+      setScale(Math.max(0.4, Math.min(1.4, availH / h)))
     }
     calc()
     const raf = requestAnimationFrame(calc)
@@ -820,7 +819,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         </div>
       ) : (
         <div style={isFull ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' } : {}}>
-          <div ref={contentRef} style={isFull ? { width: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: 'top center' } : {}}>
+          <div ref={contentRef} style={isFull ? { width: '100%', transform: `scaleY(${scale})`, transformOrigin: 'top center' } : {}}>
             <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 300px', gap: 14, alignItems: 'start' }}>
               <div style={{ minWidth: 0 }}>{dashboard}</div>
 
