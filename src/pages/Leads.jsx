@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { supabase } from '../supabase'
 
 const LEAD_STATUSES = [
@@ -27,6 +27,106 @@ function sourceBucket(raw) {
   if (s.includes('referral') || s.includes('own') || s.includes('manual')) return 'own'
   if (s.includes('platform') || s === '' || s === 'home') return 'platform'
   return 'own'
+}
+
+// per-company journey steps (driven purely by lead_distributions.status)
+const DIST_STEPS = [
+  { key: 'assigned',  label: 'Received',   icon: 'ti-inbox' },
+  { key: 'viewed',    label: 'Viewed',     icon: 'ti-eye' },
+  { key: 'contacted', label: 'Contacted',  icon: 'ti-phone' },
+  { key: 'quoted',    label: 'Quote sent', icon: 'ti-file-text' },
+  { key: 'won',       label: 'Won',        icon: 'ti-trophy' },
+]
+
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 0) return 'just now'
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return m + 'm ago'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + 'h ago'
+  const d = Math.floor(h / 24)
+  return d + 'd ago'
+}
+
+// One card per company showing its OWN progress bar (one quoted, one not yet, etc.)
+function CompanyProgress({ d, theme }) {
+  const { text, textSub, textMuted, cardBg, borderCol, isDark } = theme
+  const GREEN = '#10b981', AMBER = '#f59e0b', RED = '#ef4444', BLUE = '#3b82f6'
+  const status  = d.status || 'assigned'
+  const isLost  = status === 'lost' || status === 'transferred'
+  const curIdx  = DIST_STEPS.findIndex(s => s.key === status)
+  const reached = isLost ? -1 : (curIdx < 0 ? 0 : curIdx)
+  const when    = d.status_updated_at || d.assigned_at
+  const hoursSince = when ? (Date.now() - new Date(when).getTime()) / 3600000 : 0
+  // stalled = sitting before "quoted" with no movement for 24h+
+  const stalled = !isLost && status !== 'won' && reached < 3 && hoursSince >= 24
+  const nextIdx = (!isLost && status !== 'won') ? reached + 1 : -1
+
+  const badge = isLost
+    ? { label: status === 'transferred' ? 'Transferred' : 'Lost', color: RED, bg: isDark ? RED + '22' : '#fef2f2' }
+    : status === 'won'       ? { label: 'Won',         color: GREEN, bg: isDark ? GREEN + '22' : '#ecfdf5' }
+    : status === 'quoted'    ? { label: 'Quote sent',  color: GREEN, bg: isDark ? GREEN + '22' : '#ecfdf5' }
+    : status === 'contacted' ? { label: 'Contacted',   color: BLUE,  bg: isDark ? BLUE + '22'  : '#eff6ff' }
+    : status === 'viewed'    ? { label: stalled ? 'No quote yet' : 'Viewed', color: stalled ? AMBER : BLUE, bg: isDark ? (stalled ? AMBER : BLUE) + '22' : (stalled ? '#fef9ed' : '#eff6ff') }
+    :                          { label: stalled ? 'No response' : 'Received', color: stalled ? AMBER : textSub, bg: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9' }
+
+  const cardBorder = stalled ? AMBER : (status === 'quoted' || status === 'won') ? GREEN : borderCol
+
+  const note = isLost
+    ? 'Marked ' + badge.label.toLowerCase()
+    : status === 'won'    ? 'Won · ' + timeAgo(when)
+    : status === 'quoted' ? 'Quote sent · ' + timeAgo(when)
+    : stalled             ? (DIST_STEPS[reached]?.label || 'Received') + ' ' + timeAgo(when) + ' · no response yet — nudge company'
+    :                       (DIST_STEPS[reached]?.label || 'Received') + ' · ' + timeAgo(when)
+
+  return (
+    <div style={{ background: cardBg, border: '1px solid ' + cardBorder, borderRadius: 11, padding: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: text }}>#{d.rank} {d.name}</span>
+        {d.temperature && (
+          <span style={{ fontSize: 9.5, padding: '1px 7px', borderRadius: 99, fontWeight: 600, textTransform: 'capitalize',
+            background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+            color: d.temperature === 'hot' ? RED : d.temperature === 'warm' ? AMBER : BLUE }}>
+            {d.temperature}
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: badge.bg, color: badge.color, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {stalled && <i className="ti ti-clock" style={{ fontSize: 11 }} />}
+          {badge.label}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {DIST_STEPS.map((s, i) => {
+          const done        = !isLost && i <= reached
+          const isNextAmber = !isLost && stalled && i === nextIdx
+          const col         = done ? GREEN : isNextAmber ? AMBER : textMuted
+          const ic          = done ? (i === reached ? s.icon : 'ti-circle-check') : isNextAmber ? 'ti-point' : s.icon
+          const lineGreen   = !isLost && i <= reached
+          return (
+            <Fragment key={s.key}>
+              {i > 0 && <div style={{ height: 2, flex: 1, background: lineGreen ? GREEN : borderCol }} />}
+              <div style={{ flexShrink: 0, width: 60, textAlign: 'center' }}>
+                <i className={'ti ' + ic} style={{ fontSize: 18, color: col }} />
+                <div style={{ fontSize: 9.5, color: col, marginTop: 3, fontWeight: (i === reached || isNextAmber) ? 600 : 400 }}>{s.label}</div>
+              </div>
+            </Fragment>
+          )
+        })}
+      </div>
+
+      <div style={{ fontSize: 11, color: stalled ? AMBER : textSub, marginTop: 11, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <i className={'ti ' + (stalled ? 'ti-alert-triangle' : isLost ? 'ti-circle-x' : 'ti-clock')} style={{ fontSize: 12 }} />
+        <span>{note}</span>
+        {d.follow_up_date && <span style={{ color: textMuted, marginLeft: 'auto', whiteSpace: 'nowrap' }}>F/U {new Date(d.follow_up_date).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}</span>}
+      </div>
+
+      {d.notes && <div style={{ fontSize: 11, color: textMuted, marginTop: 6, lineHeight: 1.4 }}>{d.notes}</div>}
+    </div>
+  )
 }
 
 export default function Leads() {
@@ -60,15 +160,24 @@ export default function Leads() {
       .order('created_at', { ascending: false })
     setLeads(leadsData || [])
 
-    // distribution: include status + follow-up so admin sees what each company did
+    // distribution: full per-company progress (status + timestamps + temp/notes)
     const { data: distData } = await supabase
       .from('lead_distributions')
-      .select('lead_id, rank, status, follow_up_date, companies(name)')
+      .select('lead_id, rank, status, status_updated_at, assigned_at, follow_up_date, notes, temperature, companies(name)')
       .order('rank', { ascending: true })
     const map = {}
     for (const d of distData || []) {
       if (!map[d.lead_id]) map[d.lead_id] = []
-      map[d.lead_id].push({ name: d.companies?.name || '—', rank: d.rank, status: d.status || 'assigned', follow_up_date: d.follow_up_date })
+      map[d.lead_id].push({
+        name: d.companies?.name || '—',
+        rank: d.rank,
+        status: d.status || 'assigned',
+        status_updated_at: d.status_updated_at,
+        assigned_at: d.assigned_at,
+        follow_up_date: d.follow_up_date,
+        notes: d.notes,
+        temperature: d.temperature,
+      })
     }
     setDists(map)
 
@@ -404,19 +513,14 @@ export default function Leads() {
                           </div>
                           {leadDists.length > 0 && (
                             <div>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 6 }}>Distributed to (with each company's progress):</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {leadDists.map((d, i) => {
-                                  const dPage = DIST_TO_PAGE[d.status] || 'new'
-                                  const dsc = statusConfig(dPage)
-                                  return (
-                                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', borderRadius: 8, background: cardBg, border: '1px solid ' + borderCol, color: text }}>
-                                      <strong>#{d.rank} {d.name}</strong>
-                                      <span style={{ padding: '1px 7px', borderRadius: 99, background: isDark ? dsc.color + '22' : dsc.bg, color: dsc.color, fontSize: 10, fontWeight: 600 }}>{dsc.label}</span>
-                                      {d.follow_up_date && <span style={{ fontSize: 9.5, color: textMuted }}>F/U {new Date(d.follow_up_date).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}</span>}
-                                    </span>
-                                  )
-                                })}
+                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <i className="ti ti-route" style={{ fontSize: 13 }} />
+                                Distributed to {leadDists.length} {leadDists.length === 1 ? 'company' : 'companies'} · each tracked separately
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {leadDists.map((d, i) => (
+                                  <CompanyProgress key={i} d={d} theme={{ text, textSub, textMuted, cardBg, borderCol, isDark }} />
+                                ))}
                               </div>
                             </div>
                           )}
