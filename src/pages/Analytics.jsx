@@ -10,12 +10,13 @@ import { supabase } from '../supabase'
    Props: setPage, theme, adminData
 ============================================================================ */
 
-const REFRESH_MS = 60000 // auto-refresh every 60s (silent, no spinner)
+const REFRESH_MS = 30000 // auto-refresh every 30s (silent, no spinner)
 
 export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const isDark = theme !== 'light'
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1400)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false) // true while any fetch runs → spins the Refresh icon
   const [range, setRange] = useState(30)
   const [isFull, setIsFull] = useState(false)
   const [scale, setScale] = useState(1)
@@ -63,7 +64,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   useEffect(() => { rangeRef.current = range; loadAll() }, [range])
 
   // AUTO-REFRESH: silently re-fetch every REFRESH_MS, and when the tab regains focus.
-  // Silent = no full-screen spinner, just fresh numbers + "Updated" timestamp.
+  // Silent = no full-screen spinner, just fresh numbers + a spinning Refresh icon + "Updated" timestamp.
   useEffect(() => {
     const id = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return // skip when tab hidden
@@ -74,6 +75,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [])
 
+  // Fullscreen auto-resolution: scale the whole board so it fits the screen
+  // (height + width) without scrolling. Recalculates after data renders.
   useLayoutEffect(() => {
     if (!isFull) { setScale(1); return }
     const calc = () => {
@@ -87,10 +90,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       setScale(Math.max(0.4, Math.min(1.3, Math.min(availH / h, availW / w))))
     }
     calc()
-    const t1 = setTimeout(calc, 80), t2 = setTimeout(calc, 350)
+    const raf = requestAnimationFrame(calc)
+    const t1 = setTimeout(calc, 80), t2 = setTimeout(calc, 350), t3 = setTimeout(calc, 700)
     window.addEventListener('resize', calc)
-    return () => { window.removeEventListener('resize', calc); clearTimeout(t1); clearTimeout(t2) }
-  }, [isFull, vw, loading, trend, feed, heatmap])
+    return () => { window.removeEventListener('resize', calc); cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [isFull, vw, loading, trend, feed, heatmap, supply, catsInternal])
 
   function toggleFull() {
     const el = rootRef.current
@@ -126,6 +130,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
   async function loadAll(silent = false) {
     if (!silent) setLoading(true)
+    setRefreshing(true)
     try {
       const r = rangeRef.current
       const now = new Date()
@@ -332,7 +337,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       setLastSync(new Date())
 
     } catch (e) { console.error('Analytics load error:', e) }
-    finally { setLoading(false) }
+    finally { setLoading(false); setRefreshing(false) }
   }
 
   const C = isDark ? {
@@ -786,9 +791,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
               <button key={r} onClick={() => setRange(r)} style={{ border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 7, background: range === r ? `linear-gradient(135deg,${C.indigo},${C.purple})` : 'transparent', color: range === r ? '#fff' : C.t2 }}>{r}d</button>
             ))}
           </div>
-          <button onClick={() => loadAll(true)} title="Refresh now"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.t1, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
-            <i className="ti ti-refresh" style={{ fontSize: 15 }} /> Refresh
+          <button onClick={() => loadAll(true)} title="Refresh now" disabled={refreshing}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.t1, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '8px 12px', cursor: refreshing ? 'wait' : 'pointer' }}>
+            <i className="ti ti-refresh" style={{ fontSize: 15, display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} /> Refresh
           </button>
           <button onClick={exportCSV} title="Export CSV"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.t1, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
@@ -797,7 +802,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: C.green }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} /> Live
           </span>
-          <span style={{ fontSize: 10.5, color: C.t3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} title="Data auto-refreshes every 60s">
+          <span style={{ fontSize: 10.5, color: C.t3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} title="Data auto-refreshes every 30s">
             {lastSync ? `Updated ${lastSync.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai' })}` : '—'}
           </span>
           <span style={{ fontSize: 11.5, color: C.t2, fontVariantNumeric: 'tabular-nums', minWidth: 78 }}>{clock}</span>
