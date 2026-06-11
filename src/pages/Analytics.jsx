@@ -20,8 +20,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [range, setRange] = useState(30)
   const [isFull, setIsFull] = useState(false)
   const [scale, setScale] = useState(1)
-  const [clock, setClock] = useState('')
-  const [catView, setCatView] = useState('all') // category filter for Top Categories
   const [lastSync, setLastSync] = useState(null) // when data was last refreshed
   const rootRef = useRef(null)
   const contentRef = useRef(null)
@@ -55,9 +53,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     window.addEventListener('resize', onResize)
     const onFs = () => setIsFull(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', onFs)
-    const tick = () => setClock(new Date().toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai' }))
-    tick(); const ci = setInterval(tick, 1000)
-    return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs); clearInterval(ci) }
+    return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs) }
   }, [])
 
   // Initial load + reload when range changes (shows spinner)
@@ -75,8 +71,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [])
 
-  // Fullscreen auto-resolution: content fills the FULL width and is squished
-  // vertically so the whole board fits on ONE screen — no scroll, no side gaps.
+  // Fullscreen auto-resolution: content fills the FULL width at natural card
+  // proportions (uniform scale, never enlarged past 1 → no stretch/distortion),
+  // shrunk just enough to fit the whole board on ONE screen with no scroll.
   useLayoutEffect(() => {
     if (!isFull) { setScale(1); return }
     const calc = () => {
@@ -86,7 +83,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const availH = window.innerHeight - top - 16
       const h = el.scrollHeight
       if (h <= 0) return
-      setScale(Math.max(0.4, Math.min(1.4, availH / h)))
+      setScale(Math.max(0.5, Math.min(1, availH / h)))
     }
     calc()
     const raf = requestAnimationFrame(calc)
@@ -804,7 +801,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           <span style={{ fontSize: 10.5, color: C.t3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }} title="Data auto-refreshes every 30s">
             {lastSync ? `Updated ${lastSync.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai' })}` : '—'}
           </span>
-          <span style={{ fontSize: 11.5, color: C.t2, fontVariantNumeric: 'tabular-nums', minWidth: 78 }}>{clock}</span>
+          <LiveClock C={C} />
           <button onClick={toggleFull} title="Fullscreen"
             style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.line}`, background: C.soft, color: C.t1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <i className={`ti ${isFull ? 'ti-arrows-minimize' : 'ti-arrows-maximize'}`} style={{ fontSize: 16 }} />
@@ -819,7 +816,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         </div>
       ) : (
         <div style={isFull ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' } : {}}>
-          <div ref={contentRef} style={isFull ? { width: '100%', transform: `scaleY(${scale})`, transformOrigin: 'top center' } : {}}>
+          <div ref={contentRef} style={isFull ? { width: '100%', transform: `scale(${scale})`, transformOrigin: 'top center' } : {}}>
             <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 300px', gap: 14, alignItems: 'start' }}>
               <div style={{ minWidth: 0 }}>{dashboard}</div>
 
@@ -851,4 +848,16 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
 function Empty({ C, text }) {
   return <div style={{ fontSize: 12, color: C.t3, padding: '18px 4px', textAlign: 'center' }}>{text}</div>
+}
+
+// Isolated clock — ticks every second in its OWN component so only this tiny
+// node re-renders each second, never the whole dashboard (prevents the blink).
+function LiveClock({ C }) {
+  const [t, setT] = useState('')
+  useEffect(() => {
+    const tick = () => setT(new Date().toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Dubai' }))
+    tick(); const ci = setInterval(tick, 1000)
+    return () => clearInterval(ci)
+  }, [])
+  return <span style={{ fontSize: 11.5, color: C.t2, fontVariantNumeric: 'tabular-nums', minWidth: 78 }}>{t}</span>
 }
