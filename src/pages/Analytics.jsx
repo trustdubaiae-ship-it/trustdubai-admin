@@ -5,25 +5,27 @@ import { supabase } from '../supabase'
 /* ============================================================================
    TrustDubai — AI Command Center
    Real-time insights & analytics for the TrustDubai platform.
+   Layout: even "tile wall" — a single 12-column grid (Option B). Every section
+   is a tile; the Live Activity feed is a tile too (no side rail), so the board
+   is wide + short and fits ONE screen in fullscreen without distortion.
    Real data: profile_views_log, lead_form_views, lead_submissions,
               sponsor_analytics, visitor_sessions, companies, categories
-   Props: setPage, theme, adminData
 ============================================================================ */
 
-const REFRESH_MS = 30000 // auto-refresh every 30s (silent, no spinner)
+const REFRESH_MS = 30000 // auto-refresh every 30s (silent)
 
 export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const isDark = theme !== 'light'
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1400)
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false) // true while any fetch runs → spins the Refresh icon
+  const [refreshing, setRefreshing] = useState(false) // spins the Refresh icon
   const [range, setRange] = useState(30)
   const [isFull, setIsFull] = useState(false)
   const [scale, setScale] = useState(1)
-  const [lastSync, setLastSync] = useState(null) // when data was last refreshed
+  const [lastSync, setLastSync] = useState(null)
   const rootRef = useRef(null)
   const contentRef = useRef(null)
-  const rangeRef = useRef(range) // always-fresh range for the polling timer
+  const rangeRef = useRef(range)
 
   const [kpi, setKpi] = useState({
     views: 0, viewsChg: 0, unique: 0, uniqueChg: 0, leadViews: 0, leadChg: 0,
@@ -37,7 +39,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [sources, setSources] = useState([])
   const [sponsor, setSponsor] = useState({ imp: 0, clicks: 0, leads: 0, ctr: 0 })
   const [funnel, setFunnel] = useState({ views: 0, started: 0, submitted: 0, contacted: 0 })
-  const [heatmap, setHeatmap] = useState([]) // 7 x 24 grid
+  const [heatmap, setHeatmap] = useState([])
   const [sessionStats, setSessionStats] = useState({ totalVisits: 0, avgTime: 0, pagesPerVisit: 0, bounce: 0, leadConv: 0 })
   const [feed, setFeed] = useState([])
   const [insights, setInsights] = useState([])
@@ -56,14 +58,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { window.removeEventListener('resize', onResize); document.removeEventListener('fullscreenchange', onFs) }
   }, [])
 
-  // Initial load + reload when range changes (shows spinner)
   useEffect(() => { rangeRef.current = range; loadAll() }, [range])
 
-  // AUTO-REFRESH: silently re-fetch every REFRESH_MS, and when the tab regains focus.
-  // Silent = no full-screen spinner, just fresh numbers + a spinning Refresh icon + "Updated" timestamp.
   useEffect(() => {
     const id = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return // skip when tab hidden
+      if (typeof document !== 'undefined' && document.hidden) return
       loadAll(true)
     }, REFRESH_MS)
     const onFocus = () => loadAll(true)
@@ -71,9 +70,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [])
 
-  // Fullscreen auto-resolution: content fills the FULL width at natural card
-  // proportions (uniform scale, never enlarged past 1 → no stretch/distortion),
-  // shrunk just enough to fit the whole board on ONE screen with no scroll.
+  // Fullscreen: content fills the FULL width at natural proportions (uniform
+  // scale, never enlarged past 1 → no stretch/distortion), shrunk just enough
+  // to fit the whole board on ONE screen with no scroll.
   useLayoutEffect(() => {
     if (!isFull) { setScale(1); return }
     const calc = () => {
@@ -157,7 +156,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
       const pct = (cur, prev) => prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : (cur > 0 ? 100 : 0)
 
-      // KPI
       const totalViews = views.length
       const prevViews = (pvPrev || []).length
       const uniq = new Set(views.map(v => v.visitor_ip).filter(Boolean)).size
@@ -167,7 +165,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const sImp = (spon || []).filter(s => s.event_type === 'view').length
       const prevSImp = (sponPrev || []).filter(s => s.event_type === 'view').length
 
-      // Returning visitors: IPs seen more than once across views+sessions
       const ipCount = {}
       views.forEach(v => { if (v.visitor_ip) ipCount[v.visitor_ip] = (ipCount[v.visitor_ip] || 0) + 1 })
       sessions.forEach(s => { if (s.visitor_ip) ipCount[s.visitor_ip] = (ipCount[s.visitor_ip] || 0) + 1 })
@@ -175,7 +172,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const returningCount = ipKeys.filter(k => ipCount[k] > 1).length
       const returningPct = ipKeys.length > 0 ? Math.round((returningCount / ipKeys.length) * 100) : 0
 
-      // Growth score (0-100): blend of activity signals
       const growth = Math.min(100, Math.round(
         Math.min(totalViews / 50, 1) * 30 +
         Math.min(leadV / 20, 1) * 25 +
@@ -192,13 +188,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         growth,
       })
 
-      // Trend (daily)
       const buckets = {}
       for (let i = r - 1; i >= 0; i--) buckets[new Date(now.getTime() - i * 864e5).toISOString().slice(0, 10)] = 0
       views.forEach(v => { const k = (v.visited_at || '').slice(0, 10); if (k in buckets) buckets[k]++ })
       setTrend(Object.entries(buckets).map(([k, v]) => ({ label: k, v })))
 
-      // Top companies
       const coCount = {}
       views.forEach(v => { if (v.company_id) coCount[v.company_id] = (coCount[v.company_id] || 0) + 1 })
       const topArr = Object.entries(coCount).map(([id, c]) => ({ name: coMap[id] || 'Unknown', views: c }))
@@ -206,7 +200,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const maxCo = Math.max(1, ...topArr.map(t => t.views))
       setTopCos(topArr.map(t => ({ ...t, pct: Math.round((t.views / maxCo) * 100) })))
 
-      // Country (from views + sessions)
       const ctry = {}
       views.forEach(v => { const c = v.country || 'Unknown'; ctry[c] = (ctry[c] || 0) + 1 })
       sessions.forEach(s => { if (s.country) ctry[s.country] = (ctry[s.country] || 0) + 1 })
@@ -214,7 +207,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const ctryTotal = Math.max(1, ctryArr.reduce((s, c) => s + c.count, 0))
       setCountries(ctryArr.map(c => ({ ...c, pct: Math.round((c.count / ctryTotal) * 100), flag: FLAGS[c.name] || '🌐' })))
 
-      // Device
       const dev = { Mobile: 0, Desktop: 0, Tablet: 0 }
       views.forEach(v => { dev[deviceOf(v.user_agent)]++ })
       const devTotal = Math.max(1, dev.Mobile + dev.Desktop + dev.Tablet)
@@ -224,7 +216,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         { name: 'Tablet', count: dev.Tablet, pct: Math.round((dev.Tablet / devTotal) * 100), color: '#a855f7' },
       ])
 
-      // Top Categories (internal): views by company category + lead-form categories
       const cat = {}
       views.forEach(v => { const c = catMap[v.company_id] || 'Uncategorized'; cat[c] = (cat[c] || 0) + 1 })
       ;(lfv || []).forEach(l => { const c = l.category || 'Uncategorized'; cat[c] = (cat[c] || 0) + 1 })
@@ -233,31 +224,27 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const catColors = ['#f59e0b', '#a855f7', '#22d3ee', '#6366f1', '#ec4899', '#10b981', '#f97316', '#8b5cf6', '#14b8a6', '#eab308']
       setCatsInternal(catArr.map((c, i) => ({ ...c, pct: Math.round((c.count / catTotal) * 100), color: catColors[i % catColors.length] })))
 
-      // Sources
       const src = {}
       ;(lfv || []).forEach(l => { const s = l.source_url || 'direct'; src[s] = (src[s] || 0) + 1 })
       const srcArr = Object.entries(src).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5)
       const srcTotal = Math.max(1, srcArr.reduce((s, c) => s + c.count, 0))
       setSources(srcArr.map(s => ({ name: s.name, pct: Math.round((s.count / srcTotal) * 100) })))
 
-      // Sponsor
       const sImpAll = sImp
       const sClick = (spon || []).filter(s => s.event_type === 'click').length
       const sLead = (spon || []).filter(s => s.event_type === 'quote_request').length
       setSponsor({ imp: sImpAll, clicks: sClick, leads: sLead, ctr: sImpAll > 0 ? Math.round((sClick / sImpAll) * 1000) / 10 : 0 })
 
-      // Lead funnel: form views -> started (we approximate started=submitted*1.6) -> submitted -> contacted
       const subsArr = subs || []
       const submitted = subsArr.length
       const contacted = subsArr.filter(s => s.status && s.status !== 'new').length
-      const started = Math.max(submitted, Math.round(leadV * 0.55)) // form opened -> started typing
+      const started = Math.max(submitted, Math.round(leadV * 0.55))
       setFunnel({ views: leadV, started, submitted, contacted })
 
-      // Hourly heatmap (7 days x 24 hours) from views + sessions
       const grid = Array.from({ length: 7 }, () => Array(24).fill(0))
       const addToGrid = (dateStr) => {
         const d = new Date(dateStr); if (isNaN(d)) return
-        let wd = d.getDay(); wd = wd === 0 ? 6 : wd - 1 // Mon=0..Sun=6
+        let wd = d.getDay(); wd = wd === 0 ? 6 : wd - 1
         grid[wd][d.getHours()]++
       }
       views.forEach(v => addToGrid(v.visited_at))
@@ -265,7 +252,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const maxCell = Math.max(1, ...grid.flat())
       setHeatmap(grid.map(row => row.map(c => ({ count: c, intensity: c / maxCell }))))
 
-      // Session stats
       const totalVisits = sessions.length
       const avgTime = totalVisits > 0 ? Math.round(sessions.reduce((s, x) => s + (x.duration_sec || 0), 0) / totalVisits) : 0
       const pagesPerVisit = totalVisits > 0 ? Math.round((sessions.reduce((s, x) => s + (x.page_count || 1), 0) / totalVisits) * 100) / 100 : 0
@@ -274,7 +260,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       const leadConv = totalVisits > 0 ? Math.round((submitted / totalVisits) * 1000) / 10 : 0
       setSessionStats({ totalVisits, avgTime, pagesPerVisit, bounce, leadConv })
 
-      // Live activity feed
       const acts = []
       views.slice(0, 16).forEach(v => acts.push({
         t: v.visited_at, country: v.country || 'Unknown', flag: FLAGS[v.country] || '🌐',
@@ -290,11 +275,10 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         sub: s.source_page || 'Banner displayed', icon: 'click',
       }))
       acts.sort((a, b) => new Date(b.t) - new Date(a.t))
-      setFeed(acts.slice(0, 12))
+      setFeed(acts.slice(0, 14))
 
       setRealtime(views.filter(v => (Date.now() - new Date(v.visited_at).getTime()) < 30 * 60 * 1000).length)
 
-      // AI insights + recommendation
       const ins = []
       const topCountry = ctryArr.find(c => c.name !== 'Unknown')
       if (topCountry) ins.push({ icon: 'trend', color: '#10b981', text: `${topCountry.name} traffic is ${Math.round((topCountry.count / ctryTotal) * 100)}% of all visits.` })
@@ -308,7 +292,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         ? `Increase exposure for top-performing listings in ${catArr[0].name}${catArr[1] ? ' and ' + catArr[1].name : ''} categories.`
         : 'Onboard more verified companies to boost category coverage and lead flow.')
 
-      // ---- Platform Supply (company composition) — counts via head:true (no 1000-row cap) ----
       const supBase = () => supabase.from('companies').select('*', { count: 'exact', head: true }).eq('status', 'approved')
       const [tot, ver, clm, mem, lst, pFree, pSilver, pGold, pPlat] = await Promise.all([
         supBase(),
@@ -331,7 +314,6 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       })
 
       setLastSync(new Date())
-
     } catch (e) { console.error('Analytics load error:', e) }
     finally { setLoading(false); setRefreshing(false) }
   }
@@ -351,8 +333,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }
   const F = "'Inter','Manrope',system-ui,sans-serif"
 
-  function Panel({ children, style, glow }) {
-    return <div style={{ background: C.panel, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16, boxShadow: glow ? C.glow : 'none', ...style }}>{children}</div>
+  function Panel({ children, style, glow, className }) {
+    return <div className={className} style={{ background: C.panel, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16, boxShadow: glow ? C.glow : 'none', display: 'flex', flexDirection: 'column', ...style }}>{children}</div>
   }
   function fmt(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.00$/, '') + 'M'
@@ -391,10 +373,10 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }
   const iconMap = { eye: 'ti-eye', form: 'ti-forms', click: 'ti-click', trend: 'ti-trending-up', device: 'ti-device-mobile', star: 'ti-star', spark: 'ti-sparkles', cat: 'ti-category' }
 
-  function KpiCard({ label, value, suffix, chg, color, icon, sparkData, sub }) {
+  function KpiCard({ label, value, suffix, chg, color, icon, sparkData, sub, className }) {
     const up = (chg ?? 0) >= 0
     return (
-      <Panel glow style={{ position: 'relative', overflow: 'hidden', minWidth: 0 }}>
+      <Panel glow className={className} style={{ position: 'relative', overflow: 'hidden', minWidth: 0 }}>
         <div style={{ position: 'absolute', top: -28, right: -28, width: 88, height: 88, borderRadius: '50%', background: color, filter: 'blur(45px)', opacity: isDark ? 0.22 : 0.12 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
           <div style={{ width: 30, height: 30, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDark ? `${color}22` : `${color}1a`, border: `1px solid ${color}55` }}>
@@ -417,8 +399,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   }
 
   const Title = ({ children, right }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-      <span style={{ fontSize: 12.5, fontWeight: 800, color: C.t1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{children}</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <span style={{ fontSize: 12, fontWeight: 800, color: C.t1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{children}</span>
       {right}
     </div>
   )
@@ -433,7 +415,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     const area = `${pad},${H - 24} ${pts} ${pad + (d.length - 1) * stepX},${H - 24}`
     const ticks = mobile ? 4 : 6
     return (
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', flex: 1 }}>
         <defs>
           <linearGradient id="tArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.indigo} stopOpacity="0.4" /><stop offset="100%" stopColor={C.indigo} stopOpacity="0" /></linearGradient>
           <linearGradient id="tLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={C.cyan} /><stop offset="100%" stopColor={C.purple} /></linearGradient>
@@ -472,48 +454,48 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     a.click(); URL.revokeObjectURL(url)
   }
 
-  const grid3 = mobile ? '1fr' : 'repeat(3, 1fr)'
-  const COLORS4 = [C.green, C.amber, C.indigo, C.pink]
-
-  // ===================== DASHBOARD =====================
+  // ===================== TILE WALL (Option B) =====================
   const dashboard = (
     <>
-      {/* KPI ROW (6) */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : tablet ? 'repeat(3,1fr)' : 'repeat(6,1fr)', gap: 12, marginBottom: 14 }}>
-        <KpiCard label="Profile Views" value={fmt(kpi.views)} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard label="Unique Visitors" value={fmt(kpi.unique)} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} sub="by IP" />
-        <KpiCard label="Lead Form Views" value={fmt(kpi.leadViews)} chg={kpi.leadChg} color={C.indigo} icon="ti-clipboard-list" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard label="Sponsor Impr." value={fmt(kpi.sponsorImp)} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard label="Returning" value={kpi.returning} suffix="%" chg={kpi.returningChg} color={C.green} icon="ti-refresh" sub="repeat visitors" />
-        <KpiCard label="Growth Score" value={kpi.growth} suffix="/100" chg={0} color={C.pink} icon="ti-rocket" sub={kpi.growth >= 70 ? 'Excellent' : kpi.growth >= 40 ? 'Healthy' : 'Building'} />
-      </div>
+      <div className="an-grid">
 
-      {/* PLATFORM SUPPLY — company composition (live counts) */}
-      <Panel glow style={{ marginBottom: 14 }}>
-        <Title right={<span style={{ fontSize: 9, color: C.t3 }}>Live counts · count:exact</span>}>Platform Supply</Title>
-        <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap: 10, marginBottom: 14 }}>
-          {[
-            { l: 'Total Companies', v: supply.total, c: C.cyan, icon: 'ti-building-store', sub: null },
-            { l: 'Verified', v: supply.verified, c: C.green, icon: 'ti-rosette-discount-check', sub: pctOf(supply.verified, supply.total) },
-            { l: 'Claimed', v: supply.claimed, c: C.purple, icon: 'ti-discount-check', sub: pctOf(supply.claimed, supply.total) },
-            { l: 'Active Members', v: supply.members, c: C.indigo, icon: 'ti-users-group', sub: pctOf(supply.members, supply.total) },
-            { l: 'Listed (unclaimed)', v: supply.listed, c: C.amber, icon: 'ti-list-search', sub: pctOf(supply.listed, supply.total) },
-          ].map((m, i) => (
-            <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-                <div style={{ width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${m.c}22`, border: `1px solid ${m.c}55` }}>
-                  <i className={`ti ${m.icon}`} style={{ fontSize: 13, color: m.c }} />
+        {/* KPI ROW — 6 × span2 */}
+        <KpiCard className="s2" label="Profile Views" value={fmt(kpi.views)} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+        <KpiCard className="s2" label="Unique Visitors" value={fmt(kpi.unique)} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} sub="by IP" />
+        <KpiCard className="s2" label="Lead Form Views" value={fmt(kpi.leadViews)} chg={kpi.leadChg} color={C.indigo} icon="ti-clipboard-list" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+        <KpiCard className="s2" label="Sponsor Impr." value={fmt(kpi.sponsorImp)} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+        <KpiCard className="s2" label="Returning" value={kpi.returning} suffix="%" chg={kpi.returningChg} color={C.green} icon="ti-refresh" sub="repeat visitors" />
+        <KpiCard className="s2" label="Growth Score" value={kpi.growth} suffix="/100" chg={0} color={C.pink} icon="ti-rocket" sub={kpi.growth >= 70 ? 'Excellent' : kpi.growth >= 40 ? 'Healthy' : 'Building'} />
+
+        {/* PRIMARY ROW — Trend (s5) · Platform Supply (s4) · AI Insights (s3) */}
+        <Panel glow className="s5">
+          <Title right={<span style={{ fontSize: 10.5, color: C.t2 }}>{range} Days</span>}>Views Trend (Daily)</Title>
+          <TrendChart />
+        </Panel>
+
+        <Panel glow className="s4">
+          <Title right={<span style={{ fontSize: 9, color: C.t3 }}>Live · count:exact</span>}>Platform Supply</Title>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(78px,1fr))', gap: 8, marginBottom: 12 }}>
+            {[
+              { l: 'Total', v: supply.total, c: C.cyan, icon: 'ti-building-store', sub: null },
+              { l: 'Verified', v: supply.verified, c: C.green, icon: 'ti-rosette-discount-check', sub: pctOf(supply.verified, supply.total) },
+              { l: 'Claimed', v: supply.claimed, c: C.purple, icon: 'ti-discount-check', sub: pctOf(supply.claimed, supply.total) },
+              { l: 'Members', v: supply.members, c: C.indigo, icon: 'ti-users-group', sub: pctOf(supply.members, supply.total) },
+              { l: 'Listed', v: supply.listed, c: C.amber, icon: 'ti-list-search', sub: pctOf(supply.listed, supply.total) },
+            ].map((m, i) => (
+              <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${m.c}22`, border: `1px solid ${m.c}55` }}>
+                    <i className={`ti ${m.icon}`} style={{ fontSize: 11, color: m.c }} />
+                  </div>
+                  <span style={{ fontSize: 8.5, fontWeight: 800, color: C.t3, letterSpacing: '0.03em', textTransform: 'uppercase' }}>{m.l}</span>
                 </div>
-                <span style={{ fontSize: 9, fontWeight: 800, color: C.t3, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{m.l}</span>
+                <div style={{ fontSize: 20, fontWeight: 800, color: C.t1, letterSpacing: '-0.5px' }}>{fmt(m.v)}</div>
+                {m.sub != null && <div style={{ fontSize: 9, color: C.t3, marginTop: 1 }}>{m.sub}% of total</div>}
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: C.t1, letterSpacing: '-0.5px' }}>{fmt(m.v)}</div>
-              {m.sub != null && <div style={{ fontSize: 9.5, color: C.t3, marginTop: 2 }}>{m.sub}% of total</div>}
-            </div>
-          ))}
-        </div>
-        {/* Plan mix */}
-        <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Plan Mix</div>
-        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(2,1fr)', gap: mobile ? 0 : 18 }}>
+            ))}
+          </div>
+          <div style={{ fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Plan Mix</div>
           {(() => {
             const plans = [
               { k: 'free', l: 'Free', c: C.t3 },
@@ -526,7 +508,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
               const v = supply.plans[p.k] || 0
               const pc = Math.round((v / ptot) * 100)
               return (
-                <div key={i} style={{ marginBottom: 8 }}>
+                <div key={i} style={{ marginBottom: 7 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                     <span style={{ fontSize: 10.5, color: C.t2 }}>{p.l}</span>
                     <span style={{ fontSize: 10.5, fontWeight: 800, color: C.t1 }}>{fmt(v)} <span style={{ fontSize: 9, color: C.t3 }}>({pc}%)</span></span>
@@ -536,50 +518,41 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
               )
             })
           })()}
-        </div>
-      </Panel>
-
-      {/* TREND + AI INSIGHTS */}
-      <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        <Panel glow>
-          <Title right={<span style={{ fontSize: 10.5, color: C.t2 }}>{range} Days</span>}>Views Trend (Daily)</Title>
-          <TrendChart />
         </Panel>
-        <Panel glow style={{ background: isDark ? 'linear-gradient(150deg,rgba(99,102,241,0.14),rgba(168,85,247,0.06))' : C.panel }}>
+
+        <Panel glow className="s3" style={{ background: isDark ? 'linear-gradient(150deg,rgba(99,102,241,0.14),rgba(168,85,247,0.06))' : C.panel }}>
           <Title right={<i className="ti ti-robot" style={{ fontSize: 18, color: C.purple }} />}>AI Insights Engine</Title>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {insights.map((ins, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <div style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${ins.color}22`, border: `1px solid ${ins.color}55` }}>
-                  <i className={`ti ${iconMap[ins.icon] || 'ti-bulb'}`} style={{ fontSize: 12, color: ins.color }} />
+              <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                <div style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${ins.color}22`, border: `1px solid ${ins.color}55` }}>
+                  <i className={`ti ${iconMap[ins.icon] || 'ti-bulb'}`} style={{ fontSize: 11, color: ins.color }} />
                 </div>
-                <span style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>{ins.text}</span>
+                <span style={{ fontSize: 11.5, color: C.t2, lineHeight: 1.5 }}>{ins.text}</span>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 13, padding: 12, borderRadius: 12, background: C.soft, border: `1px solid ${C.line}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-              <i className="ti ti-bulb" style={{ fontSize: 14, color: C.cyan }} />
-              <span style={{ fontSize: 10, fontWeight: 800, color: C.cyan, letterSpacing: '0.06em' }}>RECOMMENDATION</span>
+          <div style={{ marginTop: 12, padding: 11, borderRadius: 12, background: C.soft, border: `1px solid ${C.line}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+              <i className="ti ti-bulb" style={{ fontSize: 13, color: C.cyan }} />
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: C.cyan, letterSpacing: '0.06em' }}>RECOMMENDATION</span>
             </div>
-            <div style={{ fontSize: 12, color: C.t1, lineHeight: 1.5 }}>{recommendation}</div>
+            <div style={{ fontSize: 11.5, color: C.t1, lineHeight: 1.5 }}>{recommendation}</div>
           </div>
         </Panel>
-      </div>
 
-      {/* COUNTRY + DEVICE + TOP COMPANIES + TOP CATEGORIES */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : tablet ? '1fr 1fr' : 'repeat(4,1fr)', gap: 14, marginBottom: 14 }}>
-        <Panel glow>
-          <Title>Country Breakdown</Title>
+        {/* SECONDARY ROW — 6 × span2 */}
+        <Panel glow className="s2">
+          <Title>Country</Title>
           {countries.length === 0 ? <Empty C={C} text="No data yet." /> : (
             <>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
                 <div style={{ position: 'relative' }}>
-                  <Donut data={countries.map((c, i) => ({ count: c.count, color: [C.indigo, C.cyan, C.purple, C.amber, C.pink, C.green][i % 6] }))} size={110} thickness={18} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: C.t1 }}>{countries[0]?.pct}%</div>
+                  <Donut data={countries.map((c, i) => ({ count: c.count, color: [C.indigo, C.cyan, C.purple, C.amber, C.pink, C.green][i % 6] }))} size={104} thickness={17} />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: C.t1 }}>{countries[0]?.pct}%</div>
                 </div>
               </div>
-              {countries.slice(0, 5).map((c, i) => (
+              {countries.slice(0, 4).map((c, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: [C.indigo, C.cyan, C.purple, C.amber, C.pink][i % 5], flexShrink: 0 }} />
                   <span style={{ fontSize: 11, color: C.t1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.flag} {c.name}</span>
@@ -590,13 +563,13 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           )}
         </Panel>
 
-        <Panel glow>
-          <Title>Device Breakdown</Title>
+        <Panel glow className="s2">
+          <Title>Device</Title>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
             <div style={{ position: 'relative' }}>
-              <Donut data={devices} size={120} thickness={20} />
+              <Donut data={devices} size={112} thickness={19} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 17, fontWeight: 800, color: C.t1 }}>{devices[1]?.pct || 0}%</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: C.t1 }}>{devices[1]?.pct || 0}%</span>
                 <span style={{ fontSize: 8.5, color: C.t3 }}>{devices.slice().sort((a,b)=>b.count-a.count)[0]?.name || 'Desktop'}</span>
               </div>
             </div>
@@ -610,8 +583,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           ))}
         </Panel>
 
-        <Panel glow>
-          <Title>Top Viewed Companies</Title>
+        <Panel glow className="s2">
+          <Title>Top Companies</Title>
           {topCos.length === 0 ? <Empty C={C} text="No views yet." /> : topCos.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 12 }}>{i + 1}</span>
@@ -619,12 +592,12 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
                 <div style={{ fontSize: 11, fontWeight: 600, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{c.name}</div>
                 <div style={{ height: 5, background: C.soft, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${c.pct}%`, height: '100%', background: `linear-gradient(90deg,${C.purple},${C.indigo})`, borderRadius: 99 }} /></div>
               </div>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: C.t2, minWidth: 38, textAlign: 'right' }}>{fmt(c.views)}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: C.t2, minWidth: 34, textAlign: 'right' }}>{fmt(c.views)}</span>
             </div>
           ))}
         </Panel>
 
-        <Panel glow>
+        <Panel glow className="s2">
           <Title right={<span style={{ fontSize: 9, color: C.t3 }}>Internal</span>}>Top Categories</Title>
           {catsInternal.length === 0 ? <Empty C={C} text="No category data yet." /> : catsInternal.slice(0, 5).map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
@@ -637,22 +610,19 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             </div>
           ))}
         </Panel>
-      </div>
 
-      {/* LEAD FUNNEL + SPONSOR + HOURLY HEATMAP + SOURCES */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : tablet ? '1fr 1fr' : '1fr 1.1fr 1.1fr 1fr', gap: 14, marginBottom: 14, alignItems: 'start' }}>
-        <Panel glow>
+        <Panel glow className="s2">
           <Title>Lead Funnel</Title>
           {(() => {
             const stages = [
-              { l: 'Lead Form Views', v: funnel.views, c: C.indigo },
-              { l: 'Form Started', v: funnel.started, c: C.purple },
-              { l: 'Form Submitted', v: funnel.submitted, c: C.pink },
+              { l: 'Form Views', v: funnel.views, c: C.indigo },
+              { l: 'Started', v: funnel.started, c: C.purple },
+              { l: 'Submitted', v: funnel.submitted, c: C.pink },
               { l: 'Contacted', v: funnel.contacted, c: C.green },
             ]
             const top = Math.max(1, funnel.views)
             return stages.map((s, i) => (
-              <div key={i} style={{ marginBottom: 10 }}>
+              <div key={i} style={{ marginBottom: 9 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontSize: 10.5, color: C.t2 }}>{s.l}</span>
                   <span style={{ fontSize: 11, fontWeight: 800, color: C.t1 }}>{fmt(s.v)} <span style={{ fontSize: 9, color: C.t3 }}>({Math.round((s.v / top) * 100)}%)</span></span>
@@ -661,10 +631,38 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
               </div>
             ))
           })()}
-          <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10, color: C.t3 }}>Conversion <b style={{ color: C.green }}>{funnel.views > 0 ? Math.round((funnel.submitted / funnel.views) * 100) : 0}%</b></div>
+          <div style={{ marginTop: 6, textAlign: 'center', fontSize: 10, color: C.t3 }}>Conversion <b style={{ color: C.green }}>{funnel.views > 0 ? Math.round((funnel.submitted / funnel.views) * 100) : 0}%</b></div>
         </Panel>
 
-        <Panel glow>
+        <Panel glow className="s2">
+          <Title>Hourly Heatmap</Title>
+          {heatmap.length === 0 ? <Empty C={C} text="No data yet." /> : (
+            <div style={{ display: 'flex', gap: 5 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 7, color: C.t3, paddingTop: 15, height: 168 }}>
+                {['00','06','12','18','23'].map(h => <span key={h}>{h}</span>)}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
+                  {DAYS.map(d => <span key={d} style={{ fontSize: 7, color: C.t3, textAlign: 'center' }}>{d[0]}</span>)}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+                  {DAYS.map((_, dayIdx) => (
+                    <div key={dayIdx} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {Array.from({ length: 24 }).map((_, h) => {
+                        const cell = heatmap[dayIdx]?.[h] || { intensity: 0, count: 0 }
+                        const op = cell.intensity === 0 ? 0.06 : 0.2 + cell.intensity * 0.8
+                        return <div key={h} title={`${DAYS[dayIdx]} ${h}:00 — ${cell.count} visits`} style={{ height: 6, borderRadius: 2, background: C.indigo, opacity: op }} />
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        {/* TERTIARY ROW — Sponsor (s3) · Sources (s3) · Session (s3) · Live Feed (s3) */}
+        <Panel glow className="s3">
           <Title>Sponsor Performance</Title>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
             {[{ l: 'IMPRESSIONS', v: fmt(sponsor.imp), c: C.purple }, { l: 'CLICKS', v: fmt(sponsor.clicks), c: C.cyan }, { l: 'CTR', v: sponsor.ctr + '%', c: C.amber }, { l: 'LEADS', v: fmt(sponsor.leads), c: C.green }].map((m, i) => (
@@ -677,34 +675,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           </div>
         </Panel>
 
-        <Panel glow>
-          <Title>Hourly Visitor Heatmap</Title>
-          {heatmap.length === 0 ? <Empty C={C} text="No data yet." /> : (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 7.5, color: C.t3, paddingTop: 16, height: 192 }}>
-                {['00','06','12','18','23'].map(h => <span key={h}>{h}</span>)}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>
-                  {DAYS.map(d => <span key={d} style={{ fontSize: 7.5, color: C.t3, textAlign: 'center' }}>{d}</span>)}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
-                  {DAYS.map((_, dayIdx) => (
-                    <div key={dayIdx} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {Array.from({ length: 24 }).map((_, h) => {
-                        const cell = heatmap[dayIdx]?.[h] || { intensity: 0, count: 0 }
-                        const op = cell.intensity === 0 ? 0.06 : 0.2 + cell.intensity * 0.8
-                        return <div key={h} title={`${DAYS[dayIdx]} ${h}:00 — ${cell.count} visits`} style={{ height: 7, borderRadius: 2, background: C.indigo, opacity: op }} />
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </Panel>
-
-        <Panel glow>
+        <Panel glow className="s3">
           <Title>Top Source Pages</Title>
           {sources.length === 0 ? <Empty C={C} text="No source data yet." /> : sources.map((s, i) => (
             <div key={i} style={{ marginBottom: 10 }}>
@@ -716,46 +687,48 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             </div>
           ))}
         </Panel>
-      </div>
 
-      {/* SESSION STATS STRIP */}
-      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(5,1fr)', gap: 12, marginBottom: 14 }}>
-        {[
-          { l: 'TOTAL VISITS', v: fmt(sessionStats.totalVisits), c: C.cyan, icon: 'ti-users-group' },
-          { l: 'AVG. TIME ON SITE', v: fmtDuration(sessionStats.avgTime), c: C.purple, icon: 'ti-clock' },
-          { l: 'PAGES PER VISIT', v: sessionStats.pagesPerVisit, c: C.indigo, icon: 'ti-files' },
-          { l: 'BOUNCE RATE', v: sessionStats.bounce + '%', c: C.amber, icon: 'ti-arrow-bounce' },
-          { l: 'LEAD CONVERSION', v: sessionStats.leadConv + '%', c: C.green, icon: 'ti-target-arrow' },
-        ].map((m, i) => (
-          <Panel key={i} glow style={{ textAlign: 'center' }}>
-            <i className={`ti ${m.icon}`} style={{ fontSize: 16, color: m.c }} />
-            <div style={{ fontSize: 22, fontWeight: 800, color: C.t1, marginTop: 6, letterSpacing: '-0.5px' }}>{m.v}</div>
-            <div style={{ fontSize: 8.5, fontWeight: 700, color: C.t3, letterSpacing: '0.05em', marginTop: 2 }}>{m.l}</div>
-          </Panel>
-        ))}
-      </div>
-
-      {/* TOP CATEGORIES (GLOBAL) — API placeholder */}
-      <Panel glow style={{ marginBottom: 14, borderStyle: 'dashed' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <i className="ti ti-world-search" style={{ fontSize: 16, color: C.amber }} />
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: C.t1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Top Categories (Global)</span>
-          <span style={{ fontSize: 8.5, fontWeight: 800, background: `${C.amber}22`, color: C.amber, padding: '2px 7px', borderRadius: 5, border: `1px solid ${C.amber}55` }}>NEW</span>
-          <span style={{ fontSize: 10, color: C.t3 }}>Global search-volume data for Dubai/UAE (via DataForSEO)</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: mobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap: 10 }}>
-          {['Interior Design', 'Renovation', 'AC Service', 'Plumbing', 'Painting'].map((c, i) => (
-            <div key={i} style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '14px 10px', textAlign: 'center' }}>
-              <i className="ti ti-search" style={{ fontSize: 18, color: C.t3 }} />
-              <div style={{ fontSize: 10.5, color: C.t2, marginTop: 7, fontWeight: 600 }}>{c}</div>
-              <div style={{ fontSize: 9, color: C.t3, marginTop: 3 }}>Coming Soon</div>
+        <Panel glow className="s3">
+          <Title>Session Stats</Title>
+          {[
+            { l: 'Total Visits', v: fmt(sessionStats.totalVisits), c: C.cyan, icon: 'ti-users-group' },
+            { l: 'Avg. Time on Site', v: fmtDuration(sessionStats.avgTime), c: C.purple, icon: 'ti-clock' },
+            { l: 'Pages / Visit', v: sessionStats.pagesPerVisit, c: C.indigo, icon: 'ti-files' },
+            { l: 'Bounce Rate', v: sessionStats.bounce + '%', c: C.amber, icon: 'ti-arrow-bounce' },
+            { l: 'Lead Conversion', v: sessionStats.leadConv + '%', c: C.green, icon: 'ti-target-arrow' },
+          ].map((m, i, arr) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < arr.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+              <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${m.c}22`, border: `1px solid ${m.c}55` }}>
+                <i className={`ti ${m.icon}`} style={{ fontSize: 13, color: m.c }} />
+              </div>
+              <span style={{ fontSize: 11.5, color: C.t2, flex: 1 }}>{m.l}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.t1 }}>{m.v}</span>
             </div>
           ))}
-        </div>
-      </Panel>
+        </Panel>
+
+        <Panel glow className="s3">
+          <Title right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Activity Feed</Title>
+          <div className="an-scroll" style={{ flex: 1, minHeight: 0, maxHeight: 260, overflowY: 'auto' }}>
+            {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}`, fontSize: 12 }}>{a.flag}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
+                    <span style={{ fontSize: 9.5, color: C.t3, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeAgo(a.t)}</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: C.t2, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+      </div>
 
       {/* footer */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, fontSize: 11, color: C.t2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, fontSize: 11, color: C.t2, marginTop: 14 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} /> All Systems Operational · {realtime} active in last 30 min</span>
         <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
       </div>
@@ -764,7 +737,11 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
   return (
     <div ref={rootRef} style={{ background: C.bg, minHeight: '100%', fontFamily: F, color: C.t1, padding: mobile ? 12 : 18, position: 'relative', ...(isFull ? { height: '100vh', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}) }}>
-      <style>{`@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}} .an-scroll::-webkit-scrollbar{width:6px}.an-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:99px}`}</style>
+      <style>{`@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}} .an-scroll::-webkit-scrollbar{width:6px}.an-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:99px}
+        .an-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch;}
+        .an-grid>.s2{grid-column:span 2}.an-grid>.s3{grid-column:span 3}.an-grid>.s4{grid-column:span 4}.an-grid>.s5{grid-column:span 5}.an-grid>.s6{grid-column:span 6}
+        @media(max-width:1200px){.an-grid{grid-template-columns:repeat(6,1fr)}.an-grid>*{grid-column:span 3 !important}}
+        @media(max-width:760px){.an-grid{grid-template-columns:1fr;gap:12px}.an-grid>*{grid-column:span 1 !important}}`}</style>
 
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap', flexShrink: 0 }}>
@@ -817,28 +794,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       ) : (
         <div style={isFull ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' } : {}}>
           <div ref={contentRef} style={isFull ? { width: '100%', transform: `scale(${scale})`, transformOrigin: 'top center' } : {}}>
-            <div style={{ display: 'grid', gridTemplateColumns: (mobile || tablet) ? '1fr' : '1fr 300px', gap: 14, alignItems: 'start' }}>
-              <div style={{ minWidth: 0 }}>{dashboard}</div>
-
-              {/* RIGHT RAIL — LIVE ACTIVITY */}
-              <Panel glow style={{ display: 'flex', flexDirection: 'column', maxHeight: isFull ? 'none' : 880 }}>
-                <Title right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, color: C.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, animation: 'pulseDot 1.6s infinite' }} />Live</span>}>Live Activity Feed</Title>
-                <div className="an-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                  {feed.length === 0 ? <Empty C={C} text="No recent activity." /> : feed.map((a, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: i < feed.length - 1 ? `1px solid ${C.line}` : 'none' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.soft, border: `1px solid ${C.line}`, fontSize: 13 }}>{a.flag}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
-                          <span style={{ fontSize: 9.5, color: C.t3, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeAgo(a.t)}</span>
-                        </div>
-                        <div style={{ fontSize: 10.5, color: C.t2, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.sub}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </div>
+            {dashboard}
           </div>
         </div>
       )}
