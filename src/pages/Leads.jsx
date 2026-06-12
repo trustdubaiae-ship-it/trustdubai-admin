@@ -13,6 +13,9 @@ const LEAD_STATUSES = [
 // distribution status -> page status (what company set on a platform lead)
 const DIST_TO_PAGE = { assigned:'new', viewed:'qualified', contacted:'in_conversation', quoted:'proposal_given', won:'won', lost:'lost', transferred:'lost' }
 
+// a distributed platform lead that NO company has touched for this many hours = stale (leak)
+const STALE_HOURS = 48
+
 const SOURCES = [
   { key: 'platform', label: 'Platform',       color: '#0077aa', bg: '#e0f9ff', icon: 'ti-world' },
   { key: 'meta',     label: 'Meta',           color: '#1877f2', bg: '#eff6ff', icon: 'ti-brand-meta' },
@@ -147,6 +150,7 @@ export default function Leads() {
   const [quickFilter, setQuickFilter]   = useState('all')
   const [companyFilter, setCompanyFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [staleOnly, setStaleOnly]       = useState(false)
   const [companies, setCompanies]       = useState([])
   const [period, setPeriod]             = useState('all')
   const [expandedId, setExpandedId]     = useState(null)
@@ -236,6 +240,18 @@ export default function Leads() {
 
   const periodLeads = filterByPeriod(leads)
 
+  // stale = platform lead, distributed to companies, but still "new" (no company touched it) and 48h+ old
+  function isStale(lead) {
+    if (sourceBucket(lead.source) !== 'platform') return false
+    if (effectiveStatus(lead) !== 'new') return false
+    const dl = dists[lead.id] || []
+    if (dl.length === 0) return false
+    const h = (Date.now() - new Date(lead.created_at).getTime()) / 3600000
+    return h >= STALE_HOURS
+  }
+  const staleLeads = periodLeads.filter(isStale)
+  const staleCount = staleLeads.length
+
   function matchesQuick(l) {
     const st = effectiveStatus(l)
     if (quickFilter === 'distributed') return !!l.distributed
@@ -246,6 +262,7 @@ export default function Leads() {
   }
 
   const filtered = periodLeads
+    .filter(l => staleOnly ? isStale(l) : true)
     .filter(matchesQuick)
     .filter(l => statusFilter === 'all' ? true : effectiveStatus(l) === statusFilter)
     .filter(l => companyFilter === 'all' ? true : l.company_id === companyFilter)
@@ -316,6 +333,31 @@ export default function Leads() {
         </div>
       </div>
 
+      {/* Stale-leads alert bar — click to filter only untouched (2+ day) leads */}
+      {staleCount > 0 && (
+        <div onClick={() => setStaleOnly(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px', marginBottom: 12, borderRadius: 11, cursor: 'pointer', transition: 'all 0.15s',
+            background: staleOnly ? (isDark ? '#ef444422' : '#fef2f2') : (isDark ? '#f59e0b18' : '#fff8ed'),
+            border: '1.5px solid ' + (staleOnly ? '#ef4444' : '#f59e0b') }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: staleOnly ? '#ef4444' : '#f59e0b', color: '#fff' }}>
+            <i className="ti ti-alert-triangle" style={{ fontSize: 18 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: staleOnly ? '#ef4444' : (isDark ? '#fbbf24' : '#b45309') }}>
+              {staleCount} {staleCount === 1 ? 'lead' : 'leads'} 2+ days untouched by companies
+            </div>
+            <div style={{ fontSize: 11.5, color: textSub }}>
+              Distributed but no company has responded yet — review and nudge or reassign.
+            </div>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: staleOnly ? '#ef4444' : '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            {staleOnly
+              ? <><i className="ti ti-x" style={{ fontSize: 14 }} /> Clear</>
+              : <>Review now <i className="ti ti-arrow-right" style={{ fontSize: 14 }} /></>}
+          </span>
+        </div>
+      )}
+
       {/* Overview stats (row 1) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 10 }}>
         {STAT_CARDS.map(s => {
@@ -368,7 +410,7 @@ export default function Leads() {
           <span>Filtered:</span>
           {quickFilter !== 'all' && <strong style={{ color: STAT_CARDS.find(s=>s.key===quickFilter)?.color }}>{STAT_CARDS.find(s=>s.key===quickFilter)?.label}</strong>}
           {sourceFilter !== 'all' && <strong style={{ color: sourceConfig(sourceFilter).color }}>{sourceConfig(sourceFilter).label}</strong>}
-          <button onClick={() => { setSourceFilter('all'); setQuickFilter('all') }} style={{ fontSize: 11, color: '#03C1F5', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
+          <button onClick={() => { setSourceFilter('all'); setQuickFilter('all'); setStaleOnly(false) }} style={{ fontSize: 11, color: '#03C1F5', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
         </div>
       ) : <div style={{ marginBottom: 14 }} />}
 
