@@ -269,6 +269,10 @@ export default function Leads() {
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'
   const bgRow     = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'
 
+  // clicked lead -> opens side drawer (keeps the list clean even with many companies)
+  const selectedLead  = expandedId ? (leads.find(l => l.id === expandedId) || null) : null
+  const selectedDists = expandedId ? (dists[expandedId] || []) : []
+
   const STAT_CARDS = [
     { key: 'all',         label: 'Total',       value: totalLeads,    color: '#03C1F5', clickable: false },
     { key: 'distributed', label: 'Distributed', value: distributed,   color: '#7c3aed', clickable: true },
@@ -394,7 +398,7 @@ export default function Leads() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: bgRow }}>
-                {['Customer', 'Source', 'Company / Distribution', 'Rank', 'Answers', 'Status', 'Date', ''].map(h => (
+                {['Customer', 'Source', 'Company / Distribution', 'Rank', 'Answers', 'Status', 'Date'].map(h => (
                   <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
                 ))}
               </tr>
@@ -405,11 +409,10 @@ export default function Leads() {
                 const effSt = effectiveStatus(lead)
                 const sc  = statusConfig(effSt)
                 const src = sourceConfig(sourceBucket(lead.source))
-                const isExpanded = expandedId === lead.id
                 const leadDists = dists[lead.id] || []
                 return (
-                  <>
-                    <tr key={lead.id} style={{ borderBottom: '1px solid ' + borderCol }}
+                    <tr key={lead.id} onClick={() => setExpandedId(lead.id)}
+                      style={{ borderBottom: '1px solid ' + borderCol, cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = bgRow}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
@@ -422,7 +425,7 @@ export default function Leads() {
                             <div style={{ fontSize: 12.5, fontWeight: 600, color: text }}>{lead.name || 'Anonymous'}</div>
                             <div style={{ fontSize: 10.5, color: textMuted }}>
                               {lead.phone ? (
-                                <a href={'https://wa.me/' + lead.phone.replace(/[^0-9]/g, '')} target="_blank" rel="noreferrer" style={{ color: '#10b981', textDecoration: 'none' }}>💬 {lead.phone}</a>
+                                <a href={'https://wa.me/' + lead.phone.replace(/[^0-9]/g, '')} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#10b981', textDecoration: 'none' }}>💬 {lead.phone}</a>
                               ) : (lead.email || '—')}
                             </div>
                           </div>
@@ -481,7 +484,7 @@ export default function Leads() {
                             {leadDists.length > 1 && <span style={{ fontSize: 9, opacity: 0.7 }}>(best)</span>}
                           </span>
                         ) : (
-                          <select value={lead.status || 'new'} onChange={e => changeStatus(lead.id, e.target.value)}
+                          <select value={lead.status || 'new'} onClick={e => e.stopPropagation()} onChange={e => changeStatus(lead.id, e.target.value)}
                             style={{ padding: '4px 8px', borderRadius: 20, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none', appearance: 'none' }}>
                             {LEAD_STATUSES.map(s => <option key={s.value} value={s.value} style={{ background: cardBg, color: text }}>{s.label}</option>)}
                           </select>
@@ -491,43 +494,7 @@ export default function Leads() {
                       <td style={{ padding: '11px 14px', fontSize: 11.5, color: textMuted, whiteSpace: 'nowrap' }}>
                         {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}
                       </td>
-
-                      <td style={{ padding: '11px 14px' }}>
-                        <button onClick={() => setExpandedId(isExpanded ? null : lead.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: textMuted, fontSize: 12 }}>
-                          {isExpanded ? '▲' : '▼'}
-                        </button>
-                      </td>
                     </tr>
-
-                    {isExpanded && (
-                      <tr key={lead.id + '_expanded'} style={{ background: isDark ? 'rgba(3,193,245,0.04)' : '#f0fdff' }}>
-                        <td colSpan={8} style={{ padding: '14px 16px', borderBottom: '1px solid ' + borderCol }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: textSub, marginBottom: 10 }}>📋 Full Lead Details</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginBottom: leadDists.length > 0 ? 12 : 0 }}>
-                            {lead.answers && Object.entries(lead.answers).map(([q, a]) => (
-                              <div key={q} style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 8, padding: '8px 12px' }}>
-                                <div style={{ fontSize: 11, color: textMuted, marginBottom: 2 }}>{q}</div>
-                                <div style={{ fontSize: 13, fontWeight: 500, color: text }}>{String(a)}</div>
-                              </div>
-                            ))}
-                          </div>
-                          {leadDists.length > 0 && (
-                            <div>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <i className="ti ti-route" style={{ fontSize: 13 }} />
-                                Distributed to {leadDists.length} {leadDists.length === 1 ? 'company' : 'companies'} · each tracked separately
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {leadDists.map((d, i) => (
-                                  <CompanyProgress key={i} d={d} theme={{ text, textSub, textMuted, cardBg, borderCol, isDark }} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </>
                 )
               })}
             </tbody>
@@ -537,6 +504,88 @@ export default function Leads() {
           </div>
         </div>
       )}
+
+      {/* Side drawer — full lead detail + each company's own progress */}
+      {selectedLead && (() => {
+        const lead = selectedLead
+        const lDists = selectedDists
+        const isPlatform = sourceBucket(lead.source) === 'platform'
+        const src = sourceConfig(sourceBucket(lead.source))
+        const effSt = effectiveStatus(lead)
+        const sc = statusConfig(effSt)
+        return (
+          <div onClick={() => setExpandedId(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999, display: 'flex', justifyContent: 'flex-end' }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ width: 'min(470px, 100%)', height: '100vh', background: cardBg, borderLeft: '1px solid ' + borderCol, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 36px rgba(0,0,0,0.18)', animation: 'drawerIn 0.22s ease' }}>
+              <style>{`@keyframes drawerIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+
+              <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + borderCol, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, flexShrink: 0 }}>
+                    {(lead.name || 'A')[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: text }}>{lead.name || 'Anonymous'}</div>
+                    <div style={{ fontSize: 11.5, color: textMuted }}>
+                      {lead.phone
+                        ? <a href={'https://wa.me/' + lead.phone.replace(/[^0-9]/g, '')} target="_blank" rel="noreferrer" style={{ color: '#10b981', textDecoration: 'none' }}>💬 {lead.phone}</a>
+                        : (lead.email || '—')}
+                    </div>
+                  </div>
+                  <button onClick={() => setExpandedId(null)}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid ' + borderCol, background: 'transparent', color: textSub, cursor: 'pointer', fontSize: 18, lineHeight: 1, flexShrink: 0 }}>×</button>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 99, background: isDark ? src.color + '22' : src.bg, color: src.color }}>
+                    <i className={'ti ' + src.icon} style={{ fontSize: 12 }} /> {src.label}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, border: '1.5px solid ' + sc.color, background: isDark ? sc.color + '22' : sc.bg, color: sc.color }}>
+                    {sc.label}{lDists.length > 1 && isPlatform ? ' (best)' : ''}
+                  </span>
+                  <span style={{ fontSize: 11, color: textMuted, marginLeft: 'auto' }}>
+                    {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+                {lead.answers && Object.keys(lead.answers).length > 0 && (
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Requirement</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {Object.entries(lead.answers).map(([q, a]) => (
+                        <div key={q} style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: '1px solid ' + borderCol, borderRadius: 8, padding: '8px 11px' }}>
+                          <div style={{ fontSize: 10.5, color: textMuted, marginBottom: 2 }}>{q === '_area' ? 'Area' : q}</div>
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: text }}>{String(a) || '—'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {lDists.length > 0 ? (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: textSub, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <i className="ti ti-route" style={{ fontSize: 13 }} />
+                      {lDists.length} {lDists.length === 1 ? 'company' : 'companies'} · each tracked separately
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {lDists.map((d, i) => (
+                        <CompanyProgress key={i} d={d} theme={{ text, textSub, textMuted, cardBg, borderCol, isDark }} />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: textMuted, textAlign: 'center', padding: '24px 0' }}>
+                    {isPlatform ? 'Not distributed to any company yet.' : 'This is a company-added / direct lead — no distribution.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
