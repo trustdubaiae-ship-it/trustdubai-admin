@@ -51,6 +51,15 @@ function timeAgo(iso) {
   return d + 'd ago'
 }
 
+// lead age -> colour tier (green = fresh, amber = ageing, red = old & needs attention)
+function ageTier(iso) {
+  if (!iso) return { color: '#94a3b8' }
+  const h = (Date.now() - new Date(iso).getTime()) / 3600000
+  if (h < 6)  return { color: '#10b981' } // fresh
+  if (h < 48) return { color: '#f59e0b' } // ageing
+  return { color: '#ef4444' }             // old
+}
+
 // One card per company showing its OWN progress bar (one quoted, one not yet, etc.)
 function CompanyProgress({ d, theme }) {
   const { text, textSub, textMuted, cardBg, borderCol, isDark } = theme
@@ -398,7 +407,7 @@ export default function Leads() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: bgRow }}>
-                {['Customer', 'Source', 'Company / Distribution', 'Rank', 'Answers', 'Status', 'Date'].map(h => (
+                {['Customer', 'Source', 'Company / Distribution', 'Rank', 'Answers', 'Status', 'Age'].map(h => (
                   <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
                 ))}
               </tr>
@@ -491,8 +500,21 @@ export default function Leads() {
                         )}
                       </td>
 
-                      <td style={{ padding: '11px 14px', fontSize: 11.5, color: textMuted, whiteSpace: 'nowrap' }}>
-                        {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}
+                      <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
+                        {(() => {
+                          const closed = ['won','lost'].includes(effSt)
+                          const tier = closed ? { color: textMuted } : ageTier(lead.created_at)
+                          return (
+                            <>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 99, background: isDark ? tier.color + '22' : tier.color + '18', color: tier.color }}>
+                                <i className="ti ti-clock" style={{ fontSize: 11 }} /> {timeAgo(lead.created_at) || '—'}
+                              </span>
+                              <div style={{ fontSize: 10, color: textMuted, marginTop: 3 }}>
+                                {new Date(lead.created_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </td>
                     </tr>
                 )
