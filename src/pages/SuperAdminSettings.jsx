@@ -370,7 +370,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
 
         {/* SOCIAL LINKS */}
         <div style={card}>
-          <div style={{ ...sectionTitle, marginBottom: 6 }}>TrustDubai Social Links</div>
+          <div style={{ ...sectionTitle, marginBottom: 6 }}>Quvera Social Links</div>
           <p style={{ fontSize: 12, color: txt3, marginTop: 0, marginBottom: 14 }}>
             Appear as “Follow Us” icons in the public profile footer. Full URL or handle — both work. Blank = hidden.
           </p>

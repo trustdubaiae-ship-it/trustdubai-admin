@@ -26,12 +26,12 @@ const PRIORITY_CONFIG = {
 
 function buildApprovalEmail(app) {
   return {
-    subject: `🎉 Welcome to TrustDubai — ${app.company_name} is now Verified!`,
+    subject: `🎉 Welcome to Quvera — ${app.company_name} is now Verified!`,
     body: `Dear ${app.owner_name || app.company_name},
 
-We are pleased to inform you that your application to join TrustDubai has been reviewed and approved.
+We are pleased to inform you that your application to join Quvera has been reviewed and approved.
 
-Your business profile is now live on the TrustDubai platform. Customers in Dubai can now discover and connect with your services.
+Your business profile is now live on the Quvera platform. Customers in Dubai can now discover and connect with your services.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Business Name: ${app.company_name}
@@ -40,12 +40,12 @@ Verified on: ${new Date().toLocaleDateString('en-AE', { day: 'numeric', month: '
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 What's next?
-- Log in to your TrustDubai business dashboard to complete your profile
+- Log in to your Quvera business dashboard to complete your profile
 - Add photos, services, and business hours
 - Start receiving enquiries from verified customers
 
 Welcome aboard,
-The TrustDubai Team
+The Quvera Team
 support@trustdubai.ae`,
   }
 }
@@ -59,10 +59,10 @@ function buildRejectionEmail(app, reason, checklist, clNote) {
       }).join('\n')
     : ''
   return {
-    subject: `TrustDubai Application Update — ${app.company_name}`,
+    subject: `Quvera Application Update — ${app.company_name}`,
     body: `Dear ${app.owner_name || app.company_name},
 
-Thank you for applying to list your business on TrustDubai.
+Thank you for applying to list your business on Quvera.
 
 After reviewing your application, we are unable to approve your registration at this time.
 
@@ -74,7 +74,7 @@ ${checklistSection}
 You are welcome to re-apply once the issues have been resolved.
 
 Regards,
-The TrustDubai Team
+The Quvera Team
 support@trustdubai.ae`,
   }
 }

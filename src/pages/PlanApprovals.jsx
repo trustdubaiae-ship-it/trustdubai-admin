@@ -123,7 +123,7 @@ export default function PlanApprovals() {
     await supabase.from('notifications').insert({
       type: 'plan_activated',
       title: approval.plan.charAt(0).toUpperCase() + approval.plan.slice(1) + ' Plan Activated!',
-      message: 'Your ' + approval.plan + ' plan has been activated on TrustDubai.',
+      message: 'Your ' + approval.plan + ' plan has been activated on Quvera.',
       for_role: 'company',
       related_id: approval.company_id,
       related_type: 'company'

@@ -1,7 +1,7 @@
 {
-  "name": "TrustDubai Admin",
-  "short_name": "TD Admin",
-  "description": "TrustDubai admin console — verifications, companies, leads and platform management.",
+  "name": "Quvera Admin",
+  "short_name": "Quvera Admin",
+  "description": "Quvera admin console — verifications, companies, leads and platform management.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

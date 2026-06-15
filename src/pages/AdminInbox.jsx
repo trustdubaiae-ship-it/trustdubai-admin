@@ -305,7 +305,7 @@ function ConversationPane({ thread, companyName, adminData, isDark, card2, borde
               background: fromCompany ? card2 : 'rgba(29,158,117,0.12)',
               border:`0.5px solid ${border}`, borderRadius:10, padding:'8px 11px' }}>
               <div style={{ fontSize:11, fontWeight:700, color: fromCompany ? txt2 : BRAND, marginBottom:3 }}>
-                {fromCompany ? companyName(m.company_id) : (m.sender_type==='system' ? 'System' : 'TrustDubai')}
+                {fromCompany ? companyName(m.company_id) : (m.sender_type==='system' ? 'System' : 'Quvera')}
               </div>
               {m.body && <div style={{ fontSize:13, color:txt, whiteSpace:'pre-wrap' }}>{m.body}</div>}
               <div style={{ fontSize:10, color:txt3, marginTop:4 }}>{new Date(m.created_at).toLocaleString('en-GB')}</div>

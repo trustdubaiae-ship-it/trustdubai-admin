@@ -6,9 +6,9 @@ const GREEN = '#1d9e75'
 
 // Badge presets — admin click karke quickly fill kar sake
 const PRESETS = [
-  { type: 'trusted_local', title: 'Trusted Local Brand',   subtitle: 'Verified Excellence by TrustDubai', style: 'gold', icon: '🎖️' },
+  { type: 'trusted_local', title: 'Trusted Local Brand',   subtitle: 'Verified Excellence by Quvera', style: 'gold', icon: '🎖️' },
   { type: 'excellence',    title: 'Excellence Award 2026',  subtitle: 'Top Rated in Category',             style: 'navy', icon: '🏆' },
-  { type: 'elite',         title: 'TrustDubai Elite',       subtitle: 'Premium Verified Member',           style: 'red',  icon: '⭐' },
+  { type: 'elite',         title: 'Quvera Elite',       subtitle: 'Premium Verified Member',           style: 'red',  icon: '⭐' },
   { type: 'top_rated',     title: 'Top Rated',              subtitle: 'Highest customer ratings',          style: 'gold', icon: '🥇' },
   { type: 'verified_pro',  title: 'Verified Professional',  subtitle: 'ID & License confirmed',            style: 'navy', icon: '✅' },
   { type: 'fast_response', title: 'Fast Responder',         subtitle: 'Replies within hours',              style: 'gold', icon: '⚡' },

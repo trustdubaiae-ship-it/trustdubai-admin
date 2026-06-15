@@ -323,7 +323,7 @@ export default function Companies({ initialPlanFilter }) {
   ]
 
   const SOURCE_CARDS = [
-    { key: 'portal',   label: 'Portal Registered', sub: 'Signed up on TrustDubai', count: portalTotal,   color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.12)' : '#e6f4ea', icon: 'ti-user-plus' },
+    { key: 'portal',   label: 'Portal Registered', sub: 'Signed up on Quvera', count: portalTotal,   color: '#1e8e3e', bg: isDark ? 'rgba(30,142,62,0.12)' : '#e6f4ea', icon: 'ti-user-plus' },
     { key: 'imported', label: 'Google Imported',   sub: 'Auto-added listings',     count: importedTotal, color: '#a16207', bg: isDark ? 'rgba(161,98,7,0.14)' : '#fef9c3', icon: 'ti-brand-google' },
   ]
 

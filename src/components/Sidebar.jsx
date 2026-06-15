@@ -196,7 +196,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:14, fontWeight:700, color:SB.logoText, letterSpacing:'-0.2px' }}>
-            TRUST<span style={{ color:SB.logoAccent }}>DUBAI</span>
+            QU<span style={{ color:SB.logoAccent }}>VERA</span>
           </div>
           <div style={{ fontSize:8.5, color:SB.logoSub, marginTop:1 }}>Super Admin Panel</div>
         </div>

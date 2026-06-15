@@ -85,7 +85,7 @@ export default function BulkUpload(){
     </div>
     <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,padding:20,marginTop:16}}>
       <h2 style={{fontSize:15,fontWeight:600,marginBottom:12}}>Steps</h2>
-      {[['1','Fill Excel Template','Open TrustDubai_Company_Seed_Template.xlsx'],['2','Save as CSV','File → Save As → CSV format'],['3','Upload','Click Upload CSV above'],['4','Verify','Check Companies → Approved tab']].map(([n,t,d])=>(
+      {[['1','Fill Excel Template','Open Quvera_Company_Seed_Template.xlsx'],['2','Save as CSV','File → Save As → CSV format'],['3','Upload','Click Upload CSV above'],['4','Verify','Check Companies → Approved tab']].map(([n,t,d])=>(
         <div key={n} style={{display:'flex',gap:12,marginBottom:12}}>
           <div style={{width:28,height:28,borderRadius:'50%',background:'var(--primary-light)',color:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:600,flexShrink:0}}>{n}</div>
           <div><div style={{fontSize:13,fontWeight:500}}>{t}</div><div style={{fontSize:12,color:'var(--text2)',marginTop:2}}>{d}</div></div>

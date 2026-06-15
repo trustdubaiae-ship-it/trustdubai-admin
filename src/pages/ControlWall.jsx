@@ -364,7 +364,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <div style={{ width:28, height:28, borderRadius:8, background:`linear-gradient(135deg,${G.green},#15803d)`, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff' }}><i className="ti ti-brain" style={{ fontSize:16 }}/></div>
               <div>
-                <div style={{ fontSize:14, fontWeight:800, lineHeight:1 }}>TrustDubai</div>
+                <div style={{ fontSize:14, fontWeight:800, lineHeight:1 }}>Quvera</div>
                 <div style={{ fontSize:9, color:C.text3 }}>Control Wall · Command + Revenue</div>
               </div>
             </div>

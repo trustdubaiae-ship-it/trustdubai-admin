@@ -430,7 +430,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
 
   function exportCSV() {
     const rows = []
-    rows.push(['TrustDubai Analytics Export', new Date().toLocaleString('en-AE')])
+    rows.push(['Quvera Analytics Export', new Date().toLocaleString('en-AE')])
     rows.push([])
     rows.push(['KPIs'])
     rows.push(['Profile Views', kpi.views]); rows.push(['Unique Visitors', kpi.unique])
@@ -730,7 +730,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       {/* footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, fontSize: 11, color: C.t2, marginTop: 14 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} /> All Systems Operational · {realtime} active in last 30 min</span>
-        <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by TrustDubai Engine</span>
+        <span style={{ color: C.t3 }}>Timezone: Asia/Dubai (GMT +4) · Data by Quvera Engine</span>
       </div>
     </>
   )
@@ -755,7 +755,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           </div>
           <div>
             <div style={{ fontSize: mobile ? 18 : 22, fontWeight: 800, letterSpacing: '-0.5px' }}>AI Command Center</div>
-            <div style={{ fontSize: 11, color: C.t2, marginTop: 1 }}>Real-time insights & analytics for TrustDubai Platform</div>
+            <div style={{ fontSize: 11, color: C.t2, marginTop: 1 }}>Real-time insights & analytics for Quvera Platform</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
