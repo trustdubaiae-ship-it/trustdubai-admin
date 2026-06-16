@@ -143,7 +143,7 @@ export default function App() {
             </svg>
           </div>
           <div style={{ fontSize:24, fontWeight:700, color: isDark?'#f0fdf4':'#0f172a' }}>
-            TRUST<span style={{ color:'#4ade80' }}>DUBAI</span>
+            QUV<span style={{ color:'#4ade80' }}>ERA</span>
           </div>
         </div>
         <div style={{ width:36, height:36, border:'3px solid #4ade80', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }}/>
@@ -216,7 +216,7 @@ export default function App() {
               </svg>
             </div>
             <div style={{ fontSize:14, fontWeight:700, color: isDark?'#f0fdf4':'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-              TRUST<span style={{ color:'#4ade80' }}>DUBAI</span>
+              QUV<span style={{ color:'#4ade80' }}>ERA</span>
             </div>
           </div>
         </div>
