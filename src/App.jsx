@@ -135,13 +135,8 @@ export default function App() {
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background: isDark?'#0d1117':'#f0f4f8' }}>
       <div style={{ textAlign:'center' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginBottom:16 }}>
-          <div style={{ width:40, height:40, background:'linear-gradient(135deg,#0f6e56,#1d9e75)', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L4 6V12C4 16.4 7.4 20.5 12 22C16.6 20.5 20 16.4 20 12V6L12 2Z" fill="rgba(255,255,255,0.15)" stroke="#4ade80" strokeWidth="1.5"/>
-              <polyline points="8.5,12 11,14.5 15.5,10" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
+        <img src="/icon-512.png" alt="Quvera" width="72" height="72" style={{ display:'block', margin:'0 auto 12px', borderRadius:16 }} />
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', marginBottom:16 }}>
           <div style={{ fontSize:24, fontWeight:700, color: isDark?'#f0fdf4':'#0f172a' }}>
             QUV<span style={{ color:'#4ade80' }}>ERA</span>
           </div>
