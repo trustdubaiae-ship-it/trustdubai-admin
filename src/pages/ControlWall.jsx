@@ -165,6 +165,16 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
     return () => { window.removeEventListener('resize', fit); if (ro) ro.disconnect() }
   }, [])
 
+  // Mobile: reflow the fixed 1600×900 wall into a stacked, scrollable layout instead of scaling it tiny
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280)
+  useEffect(() => {
+    const r = () => setVw(window.innerWidth)
+    window.addEventListener('resize', r)
+    return () => window.removeEventListener('resize', r)
+  }, [])
+  const mobile = vw < 768
+  const mob = mobile && !isFs   // reflow on phones, but keep the scaled wall in fullscreen
+
   const [d, setD] = useState(null)
   const [updated, setUpdated] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -319,7 +329,9 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
   const delChip=v=>(<span style={{ fontSize:9.5, fontWeight:700, color:v>=0?G.green:G.red }}>{v>=0?'↑':'↓'} {Math.abs(v)}% <span style={{ color:C.text3, fontWeight:500 }}>30d</span></span>)
 
   // outer container: embedded → fill page area (relative); standalone/fullscreen → fixed full screen
-  const outerStyle = (embedded && !isFs)
+  const outerStyle = mob
+    ? { position:'relative', width:'100%', height:'auto', minHeight:400, background:C.page, borderRadius:14, overflow:'visible' }
+    : (embedded && !isFs)
     ? { position:'relative', width:'100%', height:'calc(100dvh - 92px)', minHeight:520, background:C.page, borderRadius:14, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' }
     : { position:'fixed', inset:0, zIndex:200, background:C.page, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' }
 
@@ -351,10 +363,12 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
 
   return (
     <div ref={wrapRef} style={outerStyle}>
-      <div style={{ width:BASE_W, height:BASE_H, transform:`scale(${scale})`, transformOrigin:'center center', display:'flex', flexDirection:'column', gap:9, padding:16, color:C.text, fontFamily:"'Inter',system-ui,sans-serif", boxSizing:'border-box' }}>
+      <div style={ mob
+        ? { width:'100%', height:'auto', display:'flex', flexDirection:'column', gap:10, padding:12, color:C.text, fontFamily:"'Inter',system-ui,sans-serif", boxSizing:'border-box' }
+        : { width:BASE_W, height:BASE_H, transform:`scale(${scale})`, transformOrigin:'center center', display:'flex', flexDirection:'column', gap:9, padding:16, color:C.text, fontFamily:"'Inter',system-ui,sans-serif", boxSizing:'border-box' } }>
 
         {/* TOP BAR */}
-        <div style={{ flex:'0 0 46px', display:'flex', alignItems:'center', justifyContent:'space-between', background:C.topbar, border:`1px solid ${C.border}`, borderRadius:12, padding:'0 14px' }}>
+        <div style={{ flex: mob?'none':'0 0 46px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap: mob?'wrap':'nowrap', gap: mob?8:0, background:C.topbar, border:`1px solid ${C.border}`, borderRadius:12, padding: mob?'8px 12px':'0 14px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             {isFs ? (
               <button onClick={toggleFullscreen} title="Exit fullscreen" style={{ display:'flex', alignItems:'center', gap:6, background:C.card2, border:`1px solid ${C.border}`, color:C.text, borderRadius:9, padding:'6px 12px', fontSize:12, fontWeight:600, cursor:'pointer' }}><i className="ti ti-arrow-left" style={{ fontSize:15 }}/> Exit Fullscreen</button>
@@ -379,7 +393,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* STATS (5 command + 5 revenue) */}
-        <div style={{ flex:'0 0 92px', display:'grid', gridTemplateColumns:'repeat(10,1fr)', gap:8 }}>
+        <div style={{ flex: mob?'none':'0 0 92px', display:'grid', gridTemplateColumns: mob?'repeat(2,1fr)':'repeat(10,1fr)', gap:8 }}>
           {stat('ti-star',G.green,'Total Reviews',fmtN(d.stats.totalReviews),d.delta.reviews,d.spark.reviews)}
           {stat('ti-building',G.blue,'Total Businesses',fmtN(d.stats.totalBusinesses),d.delta.business,d.spark.business)}
           {stat('ti-users',G.purple,'Total Users',fmtN(d.stats.totalUsers),d.delta.users,d.spark.users)}
@@ -393,7 +407,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* ROW 2 */}
-        <div style={{ flex:'1.55', display:'grid', gridTemplateColumns:'1.7fr 1.2fr 1.25fr 1.2fr 1.25fr 1fr', gap:9, minHeight:0 }}>
+        <div style={{ flex: mob?'none':'1.55', display:'grid', gridTemplateColumns: mob?'1fr':'1.7fr 1.2fr 1.25fr 1.2fr 1.25fr 1fr', gap:9, minHeight:0 }}>
           <div style={card}>
             <Title right={<span style={{ display:'flex', gap:9, fontSize:9.5 }}><span style={{ color:C.text2, display:'flex', alignItems:'center', gap:3 }}><span style={{ width:7, height:7, borderRadius:'50%', background:G.green }}/>Reviews</span><span style={{ color:C.text2, display:'flex', alignItems:'center', gap:3 }}><span style={{ width:7, height:7, borderRadius:'50%', background:G.purple }}/>Ratings</span></span>}>Reviews &amp; Ratings Overview</Title>
             <div style={{ flex:1, minHeight:0, display:'flex', alignItems:'center' }}><DualLine series={d.rTrend} c1={G.green} c2={G.purple} C={C} h={120}/></div>
@@ -451,7 +465,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* ROW 3 */}
-        <div style={{ flex:'1.4', display:'grid', gridTemplateColumns:'1.25fr 1fr 1.3fr 1.25fr 1.3fr 1.45fr', gap:9, minHeight:0 }}>
+        <div style={{ flex: mob?'none':'1.4', display:'grid', gridTemplateColumns: mob?'1fr':'1.25fr 1fr 1.3fr 1.25fr 1.3fr 1.45fr', gap:9, minHeight:0 }}>
           <div style={card}>
             <Title>Businesses Growth</Title>
             <div style={{ flex:1, minHeight:0, display:'flex', alignItems:'flex-end' }}><VBars rows={d.months} C={C} h={104}/></div>
@@ -493,7 +507,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* ROW 4 — Plan Revenue + Geographic */}
-        <div style={{ flex:'1.05', display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:9, minHeight:0 }}>
+        <div style={{ flex: mob?'none':'1.05', display:'grid', gridTemplateColumns: mob?'1fr':'1.5fr 1fr', gap:9, minHeight:0 }}>
           <div style={card}>
             <Title>Plan Revenue (Monthly)</Title>
             <div style={{ flex:1, display:'flex', alignItems:'center', gap:10, minHeight:0 }}>
@@ -522,7 +536,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* ROW 5 — Score / Status / Category / Conversion */}
-        <div style={{ flex:'1.35', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:9, minHeight:0 }}>
+        <div style={{ flex: mob?'none':'1.35', display:'grid', gridTemplateColumns: mob?'1fr':'repeat(4,1fr)', gap:9, minHeight:0 }}>
           <div style={card}>
             <Title>AI Lead Score</Title>
             <div style={{ flex:1, display:'flex', alignItems:'center', gap:8, minHeight:0 }}>
@@ -551,7 +565,7 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
         </div>
 
         {/* ROW 6 — alerts + live feed */}
-        <div style={{ flex:'1', display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 2fr', gap:9, minHeight:0 }}>
+        <div style={{ flex: mob?'none':'1', display:'grid', gridTemplateColumns: mob?'repeat(2,1fr)':'1fr 1fr 1fr 1fr 2fr', gap:9, minHeight:0 }}>
           {[['ti-clock-pause',G.green,'Pending Reviews',d.pendingReviews,'pending approval'],['ti-building-plus',G.blue,'Pending Businesses',d.pendingBiz,'pending approval'],['ti-flag',G.red,'Reported Reviews',d.reportedReviews,'reported'],['ti-mail-opened',G.purple,'Unread Enquiries',d.unreadEnq,'unread']].map(([ic,col,lab,val,sub],i)=>(
             <div key={i} style={{ ...card, justifyContent:'center', borderColor:col+'33' }}>
               <div style={{ display:'flex', alignItems:'center', gap:9 }}>
@@ -561,9 +575,9 @@ export default function ControlWall({ onBack, theme: initialTheme, embedded = fa
               <div style={{ fontSize:9, color:col, fontWeight:600, marginTop:5 }}>{sub} →</div>
             </div>
           ))}
-          <div style={card}>
+          <div style={{ ...card, gridColumn: mob?'1 / -1':'auto' }}>
             <Title right={<span style={{ fontSize:9, color:G.green, display:'flex', alignItems:'center', gap:3 }}><span style={{ width:6, height:6, borderRadius:'50%', background:G.green }}/>Live</span>}>Live Activity Feed</Title>
-            <div style={{ flex:1, display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:7, overflow:'hidden' }}>
+            <div style={{ flex:1, display:'grid', gridTemplateColumns: mob?'repeat(2,1fr)':'repeat(5,1fr)', gap:7, overflow:'hidden' }}>
               {d.liveLeads.length===0 ? <div style={{ color:C.text3, fontSize:11, gridColumn:'1/-1', textAlign:'center', alignSelf:'center' }}>No recent leads</div> :
               d.liveLeads.map((l,i)=>{ const col={'Meta Ads':G.blue,'WhatsApp':G.green,'Form':G.purple,'Manual':G.amber,'Google':G.cyan,'Other':C.text3}[l.src]||C.text3; return (
                 <div key={i} style={{ background:C.card2, border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 7px', display:'flex', flexDirection:'column', gap:2, minWidth:0 }}>

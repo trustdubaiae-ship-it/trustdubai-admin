@@ -75,7 +75,9 @@ export default function App() {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  const isMobile = vw < 900
+  // Tablet + phone (iPad portrait/landscape, phones) use the hamburger drawer.
+  // Desktops / large laptops (≥1200px) keep the fixed sidebar.
+  const isMobile = vw < 1200
 
   // Keep page in sync with the URL hash (browser back/forward + manual hash change)
   useEffect(() => {
