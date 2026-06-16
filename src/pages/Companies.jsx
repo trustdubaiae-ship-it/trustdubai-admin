@@ -693,7 +693,7 @@ export default function Companies({ initialPlanFilter }) {
                   {row('Location', detailC.area || detailC.location)}
                   {row('Category', detailC.category)}
                   {row('Performance Score', score.toFixed(1) + ' / 10')}
-                  {row('Slug / URL', detailC.slug ? 'trustdubai.ae/' + detailC.slug : null)}
+                  {row('Slug / URL', detailC.slug ? 'quvera.ae/' + detailC.slug : null)}
                   {row('Plan', plan.label + (detailC.plan_expires_at ? ' · ' + (expiry?.label || '') : ''))}
                   {row('Plan Started', detailC.plan_started_at ? new Date(detailC.plan_started_at).toLocaleDateString('en-AE') : null)}
                   {row('Plan Expires', detailC.plan_expires_at ? new Date(detailC.plan_expires_at).toLocaleDateString('en-AE', { day: 'numeric', month: 'long', year: 'numeric' }) : null)}
@@ -712,7 +712,7 @@ export default function Companies({ initialPlanFilter }) {
                     {truthy(detailC.is_verified) ? '✓ Unverify' : '✓ Verify'}
                   </button>
                   {detailC.slug && (
-                    <button onClick={() => window.open('https://trustdubai.ae/' + detailC.slug, '_blank')} style={{ padding: '10px 14px', background: isDk ? 'rgba(255,255,255,0.05)' : '#f1f5f9', color: ts, border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>🔗 View</button>
+                    <button onClick={() => window.open('https://quvera.ae/' + detailC.slug, '_blank')} style={{ padding: '10px 14px', background: isDk ? 'rgba(255,255,255,0.05)' : '#f1f5f9', color: ts, border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>🔗 View</button>
                   )}
                 </div>
               </div>

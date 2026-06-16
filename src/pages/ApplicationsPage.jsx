@@ -46,7 +46,7 @@ What's next?
 
 Welcome aboard,
 The Quvera Team
-support@trustdubai.ae`,
+support@quvera.ae`,
   }
 }
 
@@ -75,7 +75,7 @@ You are welcome to re-apply once the issues have been resolved.
 
 Regards,
 The Quvera Team
-support@trustdubai.ae`,
+support@quvera.ae`,
   }
 }
 

@@ -128,7 +128,7 @@ export default function SponsorSlotsPage() {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
         <div>
           <h1 style={{ fontSize:20, fontWeight:700, color:C.text, letterSpacing:'-0.3px' }}>Sponsor Slots</h1>
-          <p style={{ fontSize:11, color:C.text2, marginTop:3 }}>Manage sponsored placements on trustdubai.ae</p>
+          <p style={{ fontSize:11, color:C.text2, marginTop:3 }}>Manage sponsored placements on quvera.ae</p>
         </div>
         <button onClick={fetchAll} style={{ padding:'7px 14px', background:'rgba(74,222,128,0.08)', border:'0.5px solid rgba(74,222,128,0.2)', borderRadius:8, fontSize:11, color:'#4ade80', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
           <i className="ti ti-refresh" style={{ fontSize:13 }}/> Refresh
