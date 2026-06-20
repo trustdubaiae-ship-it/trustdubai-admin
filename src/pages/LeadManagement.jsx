@@ -41,6 +41,7 @@ export default function LeadManagement({ theme, adminData }) {
   // ── dropdown data ──
   const [cats, setCats] = useState([])          // category names
   const [assignCos, setAssignCos] = useState([]) // own / non-imported companies for assignment
+  const [spinOn, setSpinOn] = useState(true)    // Spin tool master switch (platform_settings)
 
   // ── Add Manual Lead modal ──
   const [showAdd, setShowAdd] = useState(false)
@@ -82,13 +83,14 @@ export default function LeadManagement({ theme, adminData }) {
 
   async function load() {
     setLoading(true)
-    const [{ data: leads }, { data: comps }, { data: catList }, { data: aco }] = await Promise.all([
+    const [{ data: leads }, { data: comps }, { data: catList }, { data: aco }, { data: ps }] = await Promise.all([
       supabase.from('lead_submissions')
         .select('id, company_id, name, phone, email, status, source, created_at')
         .order('created_at', { ascending: false }),
       supabase.from('companies').select('id, name'),
       supabase.from('categories').select('name').eq('is_active', true).order('sort_order', { ascending: true }),
       supabase.from('companies').select('id, name, category').eq('is_imported', false).order('name', { ascending: true }),
+      supabase.from('platform_settings').select('spin_enabled').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     ])
     const map = {}
     ;(comps || []).forEach(c => { map[c.id] = c.name })
@@ -96,6 +98,7 @@ export default function LeadManagement({ theme, adminData }) {
     setRows(leads || [])
     setCats((catList || []).map(c => c.name))
     setAssignCos(aco || [])
+    setSpinOn(ps ? ps.spin_enabled !== false : true)
     setSel([])
     setLoading(false)
   }
@@ -310,10 +313,12 @@ export default function LeadManagement({ theme, adminData }) {
                 </div>
               </div>
 
-              <button onClick={() => openSpin(c)} disabled={busy} title="Spin — find a company to call"
-                style={{ background: C.greenBg, border: `1px solid ${C.green}55`, color: C.green, height: 34, padding: '0 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
-                <i className="ti ti-refresh" style={{ fontSize: 15 }} /> Spin
-              </button>
+              {spinOn && (
+                <button onClick={() => openSpin(c)} disabled={busy} title="Spin — find a company to call"
+                  style={{ background: C.greenBg, border: `1px solid ${C.green}55`, color: C.green, height: 34, padding: '0 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
+                  <i className="ti ti-refresh" style={{ fontSize: 15 }} /> Spin
+                </button>
+              )}
 
               <button onClick={() => setPendingDelete([c.id])} disabled={busy} title="Delete this lead"
                 style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.danger, width: 34, height: 34, borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
