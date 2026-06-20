@@ -5,6 +5,15 @@ import { supabase } from '../supabase'
 const BRAND = '#0099cc'
 const PAGE = 25
 
+const DUBAI_AREAS = [
+  'Downtown Dubai','Business Bay','Dubai Marina','Palm Jumeirah','Jumeirah Village Circle (JVC)',
+  'Jumeirah Lake Towers (JLT)','Jumeirah','Dubai Hills Estate','Arabian Ranches','DAMAC Hills',
+  'Emirates Hills','The Springs','The Meadows','The Greens','Dubai Silicon Oasis',
+  'Mirdif','Al Barsha','Deira','Bur Dubai','Dubai Investment Park (DIP)',
+  'Jumeirah Beach Residence (JBR)','DIFC','City Walk','Al Furjan','Discovery Gardens',
+  'Motor City','Jumeirah Golf Estates','Dubailand','International City','Town Square','Other',
+]
+
 function isTestLead(c) {
   const t = (s) => (s || '').toLowerCase().includes('test')
   return t(c.name) || t(c.email) || t(c.phone)
@@ -29,6 +38,29 @@ export default function LeadManagement({ theme, adminData }) {
   const [visible, setVisible] = useState(PAGE)
   const [pendingDelete, setPendingDelete] = useState(null) // array of ids awaiting confirm
 
+  // ── dropdown data ──
+  const [cats, setCats] = useState([])          // category names
+  const [assignCos, setAssignCos] = useState([]) // own / non-imported companies for assignment
+
+  // ── Add Manual Lead modal ──
+  const [showAdd, setShowAdd] = useState(false)
+  const [mlName, setMlName] = useState('')
+  const [mlPhone, setMlPhone] = useState('')
+  const [mlEmail, setMlEmail] = useState('')
+  const [mlCat, setMlCat] = useState('')
+  const [mlArea, setMlArea] = useState('')
+  const [mlCo, setMlCo] = useState('')
+  const [mlNotes, setMlNotes] = useState('')
+  const [mlBusy, setMlBusy] = useState(false)
+  const [mlErr, setMlErr] = useState('')
+
+  // ── Spin panel ──
+  const [spinLead, setSpinLead] = useState(null)
+  const [spinList, setSpinList] = useState([])
+  const [spinIdx, setSpinIdx] = useState(0)
+  const [spinHist, setSpinHist] = useState([])
+  const [spinBusy, setSpinBusy] = useState(false)
+
   const C = {
     title: isDark ? '#f0fdf4' : '#0f172a',
     sub:   isDark ? '#94a3b8' : '#64748b',
@@ -44,20 +76,26 @@ export default function LeadManagement({ theme, adminData }) {
     inputBg: isDark ? '#0f1419' : '#f8fafc',
     danger: '#c0392b',
     dangerBg: 'rgba(248,113,113,0.15)',
+    green: '#1d9e75',
+    greenBg: 'rgba(29,158,117,0.15)',
   }
 
   async function load() {
     setLoading(true)
-    const [{ data: leads }, { data: comps }] = await Promise.all([
+    const [{ data: leads }, { data: comps }, { data: catList }, { data: aco }] = await Promise.all([
       supabase.from('lead_submissions')
         .select('id, company_id, name, phone, email, status, source, created_at')
         .order('created_at', { ascending: false }),
       supabase.from('companies').select('id, name'),
+      supabase.from('categories').select('name').eq('is_active', true).order('sort_order', { ascending: true }),
+      supabase.from('companies').select('id, name, category').eq('is_imported', false).order('name', { ascending: true }),
     ])
     const map = {}
     ;(comps || []).forEach(c => { map[c.id] = c.name })
     setCompanies(map)
     setRows(leads || [])
+    setCats((catList || []).map(c => c.name))
+    setAssignCos(aco || [])
     setSel([])
     setLoading(false)
   }
@@ -77,6 +115,80 @@ export default function LeadManagement({ theme, adminData }) {
     if (error) { alert('Error: ' + error.message); return }
     await load()
     alert(`Deleted ${data ?? ids.length} lead(s) and all related records.`)
+  }
+
+  // ── Manual lead ──
+  async function submitManual() {
+    if (!mlName.trim())  { setMlErr('Customer name is required'); return }
+    if (!mlPhone.trim()) { setMlErr('Phone is required'); return }
+    if (!mlCat)          { setMlErr('Please select a category'); return }
+    if (!mlCo)           { setMlErr('Please choose a company to assign'); return }
+    setMlBusy(true); setMlErr('')
+    const { error } = await supabase.rpc('fn_create_manual_lead', {
+      p_name: mlName.trim(),
+      p_phone: mlPhone.trim(),
+      p_email: mlEmail.trim(),
+      p_category: mlCat,
+      p_area: mlArea,
+      p_company_id: mlCo,
+      p_notes: mlNotes.trim() || null,
+    })
+    setMlBusy(false)
+    if (error) { setMlErr('Error: ' + error.message); return }
+    setShowAdd(false)
+    setMlName(''); setMlPhone(''); setMlEmail(''); setMlCat(''); setMlArea(''); setMlCo(''); setMlNotes('')
+    await load()
+    alert('Manual lead added and assigned ✓')
+  }
+
+  // ── Spin ──
+  async function openSpin(lead) {
+    setSpinLead(lead); setSpinIdx(0); setSpinBusy(true); setSpinList([]); setSpinHist([])
+    const [{ data: list }, { data: hist }] = await Promise.all([
+      supabase.rpc('fn_spin_companies', { p_lead_id: lead.id, p_limit: 8 }),
+      supabase.rpc('fn_spin_history', { p_lead_id: lead.id }),
+    ])
+    setSpinList(Array.isArray(list) ? list : [])
+    setSpinHist(Array.isArray(hist) ? hist : [])
+    setSpinBusy(false)
+  }
+
+  async function refetchSpin() {
+    if (!spinLead) return
+    setSpinBusy(true)
+    const { data: list } = await supabase.rpc('fn_spin_companies', { p_lead_id: spinLead.id, p_limit: 8 })
+    setSpinList(Array.isArray(list) ? list : [])
+    setSpinIdx(0)
+    setSpinBusy(false)
+  }
+
+  async function refreshHist() {
+    if (!spinLead) return
+    const { data: hist } = await supabase.rpc('fn_spin_history', { p_lead_id: spinLead.id })
+    setSpinHist(Array.isArray(hist) ? hist : [])
+  }
+
+  async function spinMark(status) {
+    const co = spinList[spinIdx]
+    if (!co || spinBusy) return
+    setSpinBusy(true)
+    const { error } = await supabase.rpc('fn_spin_mark', { p_lead_id: spinLead.id, p_company_id: co.id, p_status: status, p_note: null })
+    setSpinBusy(false)
+    if (error) { alert('Error: ' + error.message); return }
+    await refreshHist()
+    if (status === 'declined') {
+      if (spinIdx + 1 < spinList.length) setSpinIdx(spinIdx + 1)
+      else await refetchSpin()
+    } else if (status === 'claimed') {
+      alert(co.name + ' marked as claimed ✓ — lead recorded.')
+      setSpinLead(null)
+      await load()
+    }
+  }
+
+  function spinNext() {
+    if (spinIdx + 1 < spinList.length) setSpinIdx(spinIdx + 1)
+    else refetchSpin()
   }
 
   // counts
@@ -114,17 +226,32 @@ export default function LeadManagement({ theme, adminData }) {
     { key: 'manual',   label: 'Manual' },
   ]
 
+  const inp = { width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
+    background: C.inputBg, color: C.label, border: `1px solid ${C.cardBorder}`, outline: 'none' }
+  const lbl = { fontSize: 11.5, fontWeight: 600, color: C.sub, marginBottom: 5, display: 'block' }
+
   if (loading) return <div style={{ padding: 24, color: C.sub }}>Loading leads…</div>
+
+  const spinCo = spinList[spinIdx] || null
+  const statusColor = (s) => s === 'claimed' ? C.green : s === 'declined' ? C.danger : C.sub
 
   return (
     <div style={{ padding: 24, maxWidth: 1100 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4, color: C.title }}>Lead Management</h1>
-      <p style={{ color: C.sub, marginBottom: 16, fontSize: 14 }}>
-        Search, review and delete leads across all companies. Deleting a lead also removes its projects, quotations, distributions, chat and activity.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4, color: C.title }}>Lead Management</h1>
+          <p style={{ color: C.sub, marginBottom: 0, fontSize: 14, maxWidth: 640 }}>
+            Search, review and delete leads across all companies. Add manual leads and spin to recruit companies.
+          </p>
+        </div>
+        <button onClick={() => { setMlErr(''); setShowAdd(true) }}
+          style={{ background: BRAND, color: '#fff', border: 'none', padding: '10px 16px', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          <i className="ti ti-plus" style={{ fontSize: 16 }} /> Add Manual Lead
+        </button>
+      </div>
 
       {/* SEARCH + TABS */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '16px 0 14px' }}>
         <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, background: C.inputBg, border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: '8px 12px' }}>
           <i className="ti ti-search" style={{ fontSize: 16, color: C.muted }} />
           <input value={search} onChange={e => { setSearch(e.target.value); setVisible(PAGE) }}
@@ -183,6 +310,11 @@ export default function LeadManagement({ theme, adminData }) {
                 </div>
               </div>
 
+              <button onClick={() => openSpin(c)} disabled={busy} title="Spin — find a company to call"
+                style={{ background: C.greenBg, border: `1px solid ${C.green}55`, color: C.green, height: 34, padding: '0 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
+                <i className="ti ti-refresh" style={{ fontSize: 15 }} /> Spin
+              </button>
+
               <button onClick={() => setPendingDelete([c.id])} disabled={busy} title="Delete this lead"
                 style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.danger, width: 34, height: 34, borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <i className="ti ti-trash" style={{ fontSize: 15 }} />
@@ -197,7 +329,7 @@ export default function LeadManagement({ theme, adminData }) {
         )}
       </div>
 
-      {/* CONFIRM POPUP */}
+      {/* CONFIRM DELETE POPUP */}
       {pendingDelete && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
           <div style={{ background: C.cardBg, borderRadius: 14, padding: 24, width: 440, maxWidth: '100%', border: `1px solid ${C.cardBorder}` }}>
@@ -213,6 +345,154 @@ export default function LeadManagement({ theme, adminData }) {
                 {busy ? 'Deleting…' : 'Delete permanently'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD MANUAL LEAD MODAL */}
+      {showAdd && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 24, width: 480, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${C.cardBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: C.title }}>Add Manual Lead</h3>
+              <button onClick={() => setShowAdd(false)} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 16 }}>A lead that came by phone, WhatsApp or walk-in. It is assigned directly to the chosen company.</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={lbl}>Customer Name *</label>
+                <input value={mlName} onChange={e => setMlName(e.target.value)} placeholder="e.g. Ankit Sharma" style={inp} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Phone / WhatsApp *</label>
+                  <input value={mlPhone} onChange={e => setMlPhone(e.target.value)} placeholder="+971 50 000 0000" style={inp} />
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Email (optional)</label>
+                  <input value={mlEmail} onChange={e => setMlEmail(e.target.value)} placeholder="you@email.com" style={inp} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Category *</label>
+                  <select value={mlCat} onChange={e => setMlCat(e.target.value)} style={inp}>
+                    <option value="">Select category…</option>
+                    {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Area</label>
+                  <select value={mlArea} onChange={e => setMlArea(e.target.value)} style={inp}>
+                    <option value="">Select area…</option>
+                    {DUBAI_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Assign to Company *</label>
+                <select value={mlCo} onChange={e => setMlCo(e.target.value)} style={inp}>
+                  <option value="">Select company…</option>
+                  {assignCos.map(co => <option key={co.id} value={co.id}>{co.name}{co.category ? ' · ' + co.category : ''}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Notes (optional)</label>
+                <textarea value={mlNotes} onChange={e => setMlNotes(e.target.value)} placeholder="Project details, budget, timeline…" rows={3}
+                  style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+
+              {mlErr && <div style={{ fontSize: 12.5, color: C.danger, fontWeight: 600 }}>{mlErr}</div>}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+                <button onClick={() => setShowAdd(false)} disabled={mlBusy}
+                  style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.label, padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={submitManual} disabled={mlBusy}
+                  style={{ background: BRAND, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: mlBusy ? 0.6 : 1 }}>
+                  {mlBusy ? 'Adding…' : 'Add Lead'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SPIN PANEL */}
+      {spinLead && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 22, width: 460, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${C.cardBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: C.title, display: 'flex', alignItems: 'center', gap: 7 }}>
+                <i className="ti ti-refresh" style={{ fontSize: 18, color: C.green }} /> Spin — find a company
+              </h3>
+              <button onClick={() => { setSpinLead(null) }} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: 12, color: C.sub, marginBottom: 14 }}>
+              Lead: <b style={{ color: C.label }}>{spinLead.name || 'Unnamed'}</b> · {spinLead.phone || '—'}
+            </p>
+
+            {spinBusy && spinList.length === 0 ? (
+              <div style={{ padding: 26, textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading companies…</div>
+            ) : !spinCo ? (
+              <div style={{ padding: 22, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+                <i className="ti ti-mood-empty" style={{ fontSize: 26, display: 'block', marginBottom: 8 }} />
+                No more matching companies to call right now.
+                <div style={{ marginTop: 12 }}>
+                  <button onClick={refetchSpin} style={{ background: C.chipBg, border: 'none', color: C.label, padding: '8px 16px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Refresh</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ border: `1px solid ${C.cardBorder}`, borderRadius: 12, padding: 16, background: C.listBg }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.name, marginBottom: 4 }}>{spinCo.name}</div>
+                  <div style={{ fontSize: 12, color: C.sub, marginBottom: 10 }}>
+                    {spinCo.category || '—'}{spinCo.area ? ' · ' + spinCo.area : ''}
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: BRAND, letterSpacing: '0.5px', marginBottom: 14 }}>
+                    {spinCo.phone || '—'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <a href={`tel:${(spinCo.phone || '').replace(/\s/g, '')}`} onClick={() => spinMark('called')}
+                      style={{ flex: 1, minWidth: 120, textAlign: 'center', textDecoration: 'none', background: BRAND, color: '#fff', padding: '10px', borderRadius: 9, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <i className="ti ti-phone" style={{ fontSize: 15 }} /> Call
+                    </a>
+                    <button onClick={spinNext} disabled={spinBusy}
+                      style={{ flex: 1, minWidth: 100, background: C.chipBg, border: 'none', color: C.label, padding: '10px', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <i className="ti ti-player-skip-forward" style={{ fontSize: 15 }} /> Next
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button onClick={() => spinMark('claimed')} disabled={spinBusy}
+                      style={{ flex: 1, background: C.greenBg, border: `1px solid ${C.green}55`, color: C.green, padding: '10px', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <i className="ti ti-check" style={{ fontSize: 15 }} /> Claimed
+                    </button>
+                    <button onClick={() => spinMark('declined')} disabled={spinBusy}
+                      style={{ flex: 1, background: C.dangerBg, border: `1px solid ${C.danger}55`, color: C.danger, padding: '10px', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <i className="ti ti-x" style={{ fontSize: 15 }} /> Declined
+                    </button>
+                  </div>
+                  <div style={{ textAlign: 'center', fontSize: 11, color: C.muted, marginTop: 10 }}>
+                    Company {spinIdx + 1} of {spinList.length} in this batch
+                  </div>
+                </div>
+
+                {spinHist.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Call history</div>
+                    {spinHist.map((h, i) => (
+                      <div key={h.company_id || i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderTop: i > 0 ? `1px solid ${C.rowBorder}` : 'none' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: C.label, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.name}</div>
+                          <div style={{ fontSize: 10.5, color: C.muted }}>{h.phone || '—'}</div>
+                        </div>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: statusColor(h.status), textTransform: 'capitalize', flexShrink: 0 }}>{h.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
