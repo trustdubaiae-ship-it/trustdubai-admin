@@ -50,10 +50,23 @@ export default function LeadManagement({ theme, adminData }) {
   const [mlEmail, setMlEmail] = useState('')
   const [mlCat, setMlCat] = useState('')
   const [mlArea, setMlArea] = useState('')
-  const [mlCo, setMlCo] = useState('')
+  const [mlCos, setMlCos] = useState([])
   const [mlNotes, setMlNotes] = useState('')
   const [mlBusy, setMlBusy] = useState(false)
   const [mlErr, setMlErr] = useState('')
+
+  // ── Edit lead modal ──
+  const [editLead, setEditLead] = useState(null)
+  const [edName, setEdName] = useState('')
+  const [edPhone, setEdPhone] = useState('')
+  const [edEmail, setEdEmail] = useState('')
+  const [edCat, setEdCat] = useState('')
+  const [edArea, setEdArea] = useState('')
+  const [edNotes, setEdNotes] = useState('')
+  const [edCompanies, setEdCompanies] = useState([])   // currently assigned
+  const [edAddCos, setEdAddCos] = useState([])         // company ids to add
+  const [edBusy, setEdBusy] = useState(false)
+  const [edErr, setEdErr] = useState('')
 
   // ── Spin panel ──
   const [spinLead, setSpinLead] = useState(null)
@@ -121,11 +134,15 @@ export default function LeadManagement({ theme, adminData }) {
   }
 
   // ── Manual lead ──
+  function toggleMlCo(id) {
+    setMlCos(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   async function submitManual() {
     if (!mlName.trim())  { setMlErr('Customer name is required'); return }
     if (!mlPhone.trim()) { setMlErr('Phone is required'); return }
     if (!mlCat)          { setMlErr('Please select a category'); return }
-    if (!mlCo)           { setMlErr('Please choose a company to assign'); return }
+    if (!mlCos.length)   { setMlErr('Please choose at least one company'); return }
     setMlBusy(true); setMlErr('')
     const { error } = await supabase.rpc('fn_create_manual_lead', {
       p_name: mlName.trim(),
@@ -133,15 +150,70 @@ export default function LeadManagement({ theme, adminData }) {
       p_email: mlEmail.trim(),
       p_category: mlCat,
       p_area: mlArea,
-      p_company_id: mlCo,
+      p_company_ids: mlCos,
       p_notes: mlNotes.trim() || null,
     })
     setMlBusy(false)
     if (error) { setMlErr('Error: ' + error.message); return }
     setShowAdd(false)
-    setMlName(''); setMlPhone(''); setMlEmail(''); setMlCat(''); setMlArea(''); setMlCo(''); setMlNotes('')
+    setMlName(''); setMlPhone(''); setMlEmail(''); setMlCat(''); setMlArea(''); setMlCos([]); setMlNotes('')
     await load()
     alert('Manual lead added and assigned ✓')
+  }
+
+  // ── Edit lead ──
+  async function openEdit(lead) {
+    setEditLead(lead); setEdErr(''); setEdAddCos([])
+    setEdName(lead.name || ''); setEdPhone(lead.phone || ''); setEdEmail(lead.email || '')
+    setEdNotes(''); setEdCat(''); setEdArea(''); setEdCompanies([])
+    const [{ data: full }, { data: cos }] = await Promise.all([
+      supabase.from('lead_submissions').select('answers, notes').eq('id', lead.id).maybeSingle(),
+      supabase.rpc('fn_lead_companies', { p_lead_id: lead.id }),
+    ])
+    if (full) {
+      setEdNotes(full.notes || '')
+      const a = full.answers || {}
+      setEdCat(a['Service Category'] || '')
+      setEdArea(a['_area'] || '')
+    }
+    setEdCompanies(Array.isArray(cos) ? cos : [])
+  }
+
+  function toggleEdAddCo(id) {
+    setEdAddCos(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  async function removeEdCompany(companyId) {
+    if (!editLead) return
+    setEdBusy(true)
+    await supabase.rpc('fn_unassign_lead_company', { p_lead_id: editLead.id, p_company_id: companyId })
+    const { data: cos } = await supabase.rpc('fn_lead_companies', { p_lead_id: editLead.id })
+    setEdCompanies(Array.isArray(cos) ? cos : [])
+    setEdBusy(false)
+  }
+
+  async function submitEdit() {
+    if (!editLead) return
+    if (!edName.trim())  { setEdErr('Name is required'); return }
+    if (!edPhone.trim()) { setEdErr('Phone is required'); return }
+    setEdBusy(true); setEdErr('')
+    const { error } = await supabase.rpc('fn_update_lead', {
+      p_lead_id: editLead.id,
+      p_name: edName.trim(),
+      p_phone: edPhone.trim(),
+      p_email: edEmail.trim(),
+      p_category: edCat,
+      p_area: edArea,
+      p_notes: edNotes.trim() || null,
+    })
+    if (!error && edAddCos.length) {
+      await supabase.rpc('fn_assign_lead_companies', { p_lead_id: editLead.id, p_company_ids: edAddCos })
+    }
+    setEdBusy(false)
+    if (error) { setEdErr('Error: ' + error.message); return }
+    setEditLead(null)
+    await load()
+    alert('Lead updated ✓')
   }
 
   // ── Spin ──
@@ -313,6 +385,11 @@ export default function LeadManagement({ theme, adminData }) {
                 </div>
               </div>
 
+              <button onClick={() => openEdit(c)} disabled={busy} title="Edit lead"
+                style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.sub, width: 34, height: 34, borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i className="ti ti-pencil" style={{ fontSize: 15 }} />
+              </button>
+
               {spinOn && (
                 <button onClick={() => openSpin(c)} disabled={busy} title="Spin — find a company to call"
                   style={{ background: C.greenBg, border: `1px solid ${C.green}55`, color: C.green, height: 34, padding: '0 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
@@ -396,11 +473,20 @@ export default function LeadManagement({ theme, adminData }) {
                 </div>
               </div>
               <div>
-                <label style={lbl}>Assign to Company *</label>
-                <select value={mlCo} onChange={e => setMlCo(e.target.value)} style={inp}>
-                  <option value="">Select company…</option>
-                  {assignCos.map(co => <option key={co.id} value={co.id}>{co.name}{co.category ? ' · ' + co.category : ''}</option>)}
-                </select>
+                <label style={lbl}>Assign to Companies * (pick one or more)</label>
+                <div style={{ maxHeight: 170, overflowY: 'auto', border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 6, background: C.inputBg }}>
+                  {assignCos.length === 0 && <div style={{ fontSize: 12, color: C.muted, padding: 6 }}>No companies found.</div>}
+                  {assignCos.map(co => {
+                    const on = mlCos.includes(co.id)
+                    return (
+                      <label key={co.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px', cursor: 'pointer', borderRadius: 6, background: on ? C.selBg : 'transparent' }}>
+                        <input type="checkbox" checked={on} onChange={() => toggleMlCo(co.id)} style={{ width: 15, height: 15, accentColor: BRAND, cursor: 'pointer' }} />
+                        <span style={{ fontSize: 12.5, color: C.label }}>{co.name}{co.category ? ' · ' + co.category : ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {mlCos.length > 0 && <div style={{ fontSize: 11, color: C.sub, marginTop: 5 }}>{mlCos.length} compan{mlCos.length === 1 ? 'y' : 'ies'} selected</div>}
               </div>
               <div>
                 <label style={lbl}>Notes (optional)</label>
@@ -498,6 +584,97 @@ export default function LeadManagement({ theme, adminData }) {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* EDIT LEAD MODAL */}
+      {editLead && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
+          <div style={{ background: C.cardBg, borderRadius: 14, padding: 24, width: 500, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${C.cardBorder}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: C.title }}>Edit Lead</h3>
+              <button onClick={() => setEditLead(null)} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={lbl}>Customer Name *</label>
+                <input value={edName} onChange={e => setEdName(e.target.value)} style={inp} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Phone / WhatsApp *</label>
+                  <input value={edPhone} onChange={e => setEdPhone(e.target.value)} style={inp} />
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Email</label>
+                  <input value={edEmail} onChange={e => setEdEmail(e.target.value)} style={inp} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Category</label>
+                  <select value={edCat} onChange={e => setEdCat(e.target.value)} style={inp}>
+                    <option value="">Select category…</option>
+                    {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={lbl}>Area</label>
+                  <select value={edArea} onChange={e => setEdArea(e.target.value)} style={inp}>
+                    <option value="">Select area…</option>
+                    {DUBAI_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Notes</label>
+                <textarea value={edNotes} onChange={e => setEdNotes(e.target.value)} rows={2} style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+
+              {/* Assigned companies */}
+              <div>
+                <label style={lbl}>Assigned Companies</label>
+                <div style={{ border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 8, background: C.inputBg }}>
+                  {edCompanies.length === 0 && <div style={{ fontSize: 12, color: C.muted, padding: 4 }}>No companies assigned yet.</div>}
+                  {edCompanies.map(co => (
+                    <div key={co.company_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '5px 4px' }}>
+                      <span style={{ fontSize: 12.5, color: C.label }}>{co.name} <span style={{ color: C.muted, fontSize: 10.5 }}>· {co.status}</span></span>
+                      <button onClick={() => removeEdCompany(co.company_id)} disabled={edBusy} title="Remove"
+                        style={{ background: 'transparent', border: 'none', color: C.danger, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add more companies */}
+              <div>
+                <label style={lbl}>Add Companies</label>
+                <div style={{ maxHeight: 140, overflowY: 'auto', border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 6, background: C.inputBg }}>
+                  {assignCos.filter(co => !edCompanies.some(e => e.company_id === co.id)).map(co => {
+                    const on = edAddCos.includes(co.id)
+                    return (
+                      <label key={co.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px', cursor: 'pointer', borderRadius: 6, background: on ? C.selBg : 'transparent' }}>
+                        <input type="checkbox" checked={on} onChange={() => toggleEdAddCo(co.id)} style={{ width: 15, height: 15, accentColor: BRAND, cursor: 'pointer' }} />
+                        <span style={{ fontSize: 12.5, color: C.label }}>{co.name}{co.category ? ' · ' + co.category : ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {edErr && <div style={{ fontSize: 12.5, color: C.danger, fontWeight: 600 }}>{edErr}</div>}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+                <button onClick={() => setEditLead(null)} disabled={edBusy}
+                  style={{ background: 'transparent', border: `1px solid ${C.cardBorder}`, color: C.label, padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={submitEdit} disabled={edBusy}
+                  style={{ background: BRAND, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: edBusy ? 0.6 : 1 }}>
+                  {edBusy ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
