@@ -58,6 +58,10 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   const [reqLogin, setReqLogin]                 = useState(false)
   const [reqLoginToggling, setReqLoginToggling] = useState(false)
 
+  // ── Spin feature (admin lead recruiting tool) ──
+  const [spinOn, setSpinOn]               = useState(true)
+  const [spinToggling, setSpinToggling]   = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     const { data: s } = await supabase
@@ -90,6 +94,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
       setLpDays(Number(ps.launch_plan_days) || 30)
       setLpTier(ps.launch_plan_tier || 'platinum')
       setReqLogin(ps.require_login_for_quotes === true)
+      setSpinOn(ps.spin_enabled !== false)
     }
     const { count: tc } = await supabase
       .from('companies').select('*', { count: 'exact', head: true })
@@ -226,6 +231,21 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     if (!data || data.length === 0) { setMsg('Save failed — no permission (is_admin check).'); return }
     setReqLogin(next)
     setMsg(next ? 'Login is now REQUIRED for quotes ✓' : 'Quotes are now open — no login needed ✓'); setTimeout(() => setMsg(''), 2000)
+  }
+
+  // ── Spin toggle ──
+  async function toggleSpin() {
+    if (!lpRowId || spinToggling) return
+    const next = !spinOn
+    setSpinToggling(true); setMsg('')
+    const { data, error } = await supabase.from('platform_settings')
+      .update({ spin_enabled: next, updated_at: new Date().toISOString() })
+      .eq('id', lpRowId).select()
+    setSpinToggling(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission (is_admin check).'); return }
+    setSpinOn(next)
+    setMsg(next ? 'Spin tool is now ON ✓' : 'Spin tool is now OFF ✓'); setTimeout(() => setMsg(''), 1800)
   }
 
   const txt  = isDark ? '#f0fdf4' : '#0f172a'
@@ -374,6 +394,43 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
               cursor: (reqLoginToggling || !lpRowId) ? 'default' : 'pointer',
               background: reqLogin ? GREEN : (isDark ? '#30363d' : '#cbd5e1'), opacity: reqLoginToggling ? 0.6 : 1, transition: 'background 0.2s' }}>
             <span style={{ position: 'absolute', top: 3, left: reqLogin ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s' }} />
+          </button>
+        </div>
+      </div>
+
+      {/* ───────── SPIN TOOL — admin lead-recruiting feature ───────── */}
+      <div style={{ ...card, marginBottom: 16, border: `0.5px solid ${spinOn ? GREEN : cardBorder}` }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: isDark ? 'rgba(29,158,117,0.18)' : 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>🎡</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: txt }}>Spin Tool</div>
+              <div style={{ fontSize: 11.5, color: txt3, marginTop: 1 }}>Lead-recruiting tool in Lead Management (find &amp; call companies)</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 99, whiteSpace: 'nowrap',
+            background: spinOn ? 'rgba(29,158,117,0.16)' : (isDark ? '#30363d' : '#f1f5f9'),
+            color: spinOn ? GREEN : txt3 }}>
+            {spinOn ? '● On' : '○ Off'}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          background: isDark ? '#0d1117' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+          borderRadius: 11, padding: '12px 14px', marginTop: 14 }}>
+          <div style={{ minWidth: 0, paddingRight: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: txt }}>{spinOn ? 'Spin button is visible on leads' : 'Spin button is hidden'}</div>
+            <div style={{ fontSize: 11, color: txt3, marginTop: 2, lineHeight: 1.45 }}>
+              {spinOn
+                ? 'Admins can spin a lead to find matching companies, call them and mark claimed/declined.'
+                : 'The Spin button is removed from Lead Management until you turn this back on.'}
+            </div>
+          </div>
+          <button onClick={toggleSpin} disabled={spinToggling || !lpRowId}
+            style={{ position: 'relative', width: 52, height: 30, borderRadius: 99, border: 'none', flexShrink: 0,
+              cursor: (spinToggling || !lpRowId) ? 'default' : 'pointer',
+              background: spinOn ? GREEN : (isDark ? '#30363d' : '#cbd5e1'), opacity: spinToggling ? 0.6 : 1, transition: 'background 0.2s' }}>
+            <span style={{ position: 'absolute', top: 3, left: spinOn ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s' }} />
           </button>
         </div>
       </div>
