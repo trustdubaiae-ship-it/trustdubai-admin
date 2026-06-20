@@ -54,6 +54,10 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
   const [lpToggling, setLpToggling]   = useState(false)
   const [lpSaving, setLpSaving]       = useState(false)
 
+  // ── Require login for quote requests (lead gate) ──
+  const [reqLogin, setReqLogin]                 = useState(false)
+  const [reqLoginToggling, setReqLoginToggling] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     const { data: s } = await supabase
@@ -85,6 +89,7 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
       setLpEnabled(!!ps.launch_plan_enabled)
       setLpDays(Number(ps.launch_plan_days) || 30)
       setLpTier(ps.launch_plan_tier || 'platinum')
+      setReqLogin(ps.require_login_for_quotes === true)
     }
     const { count: tc } = await supabase
       .from('companies').select('*', { count: 'exact', head: true })
@@ -208,6 +213,21 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
     setMsg('Launch Plan saved ✓'); setTimeout(() => setMsg(''), 1800)
   }
 
+  // ── Require-login toggle ──
+  async function toggleRequireLogin() {
+    if (!lpRowId || reqLoginToggling) return
+    const next = !reqLogin
+    setReqLoginToggling(true); setMsg('')
+    const { data, error } = await supabase.from('platform_settings')
+      .update({ require_login_for_quotes: next, updated_at: new Date().toISOString() })
+      .eq('id', lpRowId).select()
+    setReqLoginToggling(false)
+    if (error) { setMsg('Error: ' + error.message); return }
+    if (!data || data.length === 0) { setMsg('Save failed — no permission (is_admin check).'); return }
+    setReqLogin(next)
+    setMsg(next ? 'Login is now REQUIRED for quotes ✓' : 'Quotes are now open — no login needed ✓'); setTimeout(() => setMsg(''), 2000)
+  }
+
   const txt  = isDark ? '#f0fdf4' : '#0f172a'
   const txt2 = isDark ? '#94a3b8' : '#64748b'
   const txt3 = isDark ? '#64748b' : '#94a3b8'
@@ -318,6 +338,43 @@ export default function SuperAdminSettings({ theme = 'dark' }) {
           <span style={{ fontSize: 11, color: txt3 }}>
             Turning OFF reverts everyone on trial instantly — real plans are never touched.
           </span>
+        </div>
+      </div>
+
+      {/* ───────── LEAD GATE — require login before quote requests ───────── */}
+      <div style={{ ...card, marginBottom: 16, border: `0.5px solid ${reqLogin ? GREEN : cardBorder}` }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: isDark ? 'rgba(29,158,117,0.18)' : 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>🔐</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: txt }}>Login for Quote Requests</div>
+              <div style={{ fontSize: 11.5, color: txt3, marginTop: 1 }}>Whether visitors must sign in before requesting quotes</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 99, whiteSpace: 'nowrap',
+            background: reqLogin ? 'rgba(29,158,117,0.16)' : (isDark ? '#30363d' : '#f1f5f9'),
+            color: reqLogin ? GREEN : txt3 }}>
+            {reqLogin ? '● Login required' : '○ Open (no login)'}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          background: isDark ? '#0d1117' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+          borderRadius: 11, padding: '12px 14px', marginTop: 14 }}>
+          <div style={{ minWidth: 0, paddingRight: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: txt }}>{reqLogin ? 'Visitors must sign in first' : 'Anyone can request a quote'}</div>
+            <div style={{ fontSize: 11, color: txt3, marginTop: 2, lineHeight: 1.45 }}>
+              {reqLogin
+                ? 'Customers sign in with Google before the quote form opens. Higher-quality leads, but more friction.'
+                : 'No sign-in needed — the form opens directly (name, phone, area). Less friction, more leads. Recommended at launch.'}
+            </div>
+          </div>
+          <button onClick={toggleRequireLogin} disabled={reqLoginToggling || !lpRowId}
+            style={{ position: 'relative', width: 52, height: 30, borderRadius: 99, border: 'none', flexShrink: 0,
+              cursor: (reqLoginToggling || !lpRowId) ? 'default' : 'pointer',
+              background: reqLogin ? GREEN : (isDark ? '#30363d' : '#cbd5e1'), opacity: reqLoginToggling ? 0.6 : 1, transition: 'background 0.2s' }}>
+            <span style={{ position: 'absolute', top: 3, left: reqLogin ? 25 : 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s' }} />
+          </button>
         </div>
       </div>
 
