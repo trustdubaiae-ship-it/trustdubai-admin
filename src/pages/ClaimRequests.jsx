@@ -83,17 +83,19 @@ export default function ClaimRequests() {
   async function approve(req) {
     setBusy(true)
     // Promote the listed company to a claimed, owner-linked, license-verified profile
+    // that can RECEIVE leads (accepting_leads) and is no longer "claim bait".
     if (req.company_id) {
       await supabase.from('companies').update({
         claimed: true,
         owner_email: (req.contact_email || '').toLowerCase(),
         verification_level: 'license',
+        accepting_leads: true,
       }).eq('id', req.company_id)
     }
     await supabase.from('claim_requests').update({ status: 'approved' }).eq('id', req.id)
     setBusy(false); setDetail(null); fetchAll()
     alert(req.company_id
-      ? '✅ Approved. Company is now Claimed & License-Verified.'
+      ? '✅ Approved. Company is now Claimed, License-Verified & receiving leads.'
       : '✅ Approved. No linked company — please add/assign manually if needed.')
   }
 
@@ -353,7 +355,7 @@ export default function ClaimRequests() {
 
             {status === 'pending' && (
               <p style={{ fontSize: 11, color: isDk ? '#475569' : '#94a3b8', marginTop: 10, lineHeight: 1.6, textAlign: 'center' }}>
-                Approving sets the company to <strong>Claimed</strong> + <strong>License-Verified</strong> and links <strong>{detail.contact_email || 'the owner'}</strong> as owner.
+                Approving sets the company to <strong>Claimed</strong> + <strong>License-Verified</strong>, links <strong>{detail.contact_email || 'the owner'}</strong> as owner, and turns on <strong>lead receiving</strong>.
               </p>
             )}
           </Modal>
