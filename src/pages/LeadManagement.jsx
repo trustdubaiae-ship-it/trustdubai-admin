@@ -51,6 +51,7 @@ export default function LeadManagement({ theme, adminData }) {
   const [mlCat, setMlCat] = useState('')
   const [mlArea, setMlArea] = useState('')
   const [mlCos, setMlCos] = useState([])
+  const [mlPlatform, setMlPlatform] = useState(false)
   const [mlNotes, setMlNotes] = useState('')
   const [mlBusy, setMlBusy] = useState(false)
   const [mlErr, setMlErr] = useState('')
@@ -102,7 +103,7 @@ export default function LeadManagement({ theme, adminData }) {
         .order('created_at', { ascending: false }),
       supabase.from('companies').select('id, name'),
       supabase.from('categories').select('name').eq('is_active', true).order('sort_order', { ascending: true }),
-      supabase.from('companies').select('id, name, category').eq('is_imported', false).order('name', { ascending: true }),
+      supabase.from('companies').select('id, name, category').eq('is_imported', false).eq('accepting_leads', true).order('name', { ascending: true }),
       supabase.from('platform_settings').select('spin_enabled').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     ])
     const map = {}
@@ -142,7 +143,7 @@ export default function LeadManagement({ theme, adminData }) {
     if (!mlName.trim())  { setMlErr('Customer name is required'); return }
     if (!mlPhone.trim()) { setMlErr('Phone is required'); return }
     if (!mlCat)          { setMlErr('Please select a category'); return }
-    if (!mlCos.length)   { setMlErr('Please choose at least one company'); return }
+    if (!mlPlatform && !mlCos.length) { setMlErr('Pick at least one company, or choose Distribute on platform'); return }
     setMlBusy(true); setMlErr('')
     const { error } = await supabase.rpc('fn_create_manual_lead', {
       p_name: mlName.trim(),
@@ -150,15 +151,16 @@ export default function LeadManagement({ theme, adminData }) {
       p_email: mlEmail.trim(),
       p_category: mlCat,
       p_area: mlArea,
-      p_company_ids: mlCos,
+      p_company_ids: mlPlatform ? [] : mlCos,
       p_notes: mlNotes.trim() || null,
+      p_platform: mlPlatform,
     })
     setMlBusy(false)
     if (error) { setMlErr('Error: ' + error.message); return }
     setShowAdd(false)
-    setMlName(''); setMlPhone(''); setMlEmail(''); setMlCat(''); setMlArea(''); setMlCos([]); setMlNotes('')
+    setMlName(''); setMlPhone(''); setMlEmail(''); setMlCat(''); setMlArea(''); setMlCos([]); setMlPlatform(false); setMlNotes('')
     await load()
-    alert('Manual lead added and assigned ✓')
+    alert(mlPlatform ? 'Lead added and distributed on platform ✓' : 'Manual lead added and assigned ✓')
   }
 
   // ── Edit lead ──
@@ -473,20 +475,28 @@ export default function LeadManagement({ theme, adminData }) {
                 </div>
               </div>
               <div>
-                <label style={lbl}>Assign to Companies * (pick one or more)</label>
-                <div style={{ maxHeight: 170, overflowY: 'auto', border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 6, background: C.inputBg }}>
-                  {assignCos.length === 0 && <div style={{ fontSize: 12, color: C.muted, padding: 6 }}>No companies found.</div>}
-                  {assignCos.map(co => {
-                    const on = mlCos.includes(co.id)
-                    return (
-                      <label key={co.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px', cursor: 'pointer', borderRadius: 6, background: on ? C.selBg : 'transparent' }}>
-                        <input type="checkbox" checked={on} onChange={() => toggleMlCo(co.id)} style={{ width: 15, height: 15, accentColor: BRAND, cursor: 'pointer' }} />
-                        <span style={{ fontSize: 12.5, color: C.label }}>{co.name}{co.category ? ' · ' + co.category : ''}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                {mlCos.length > 0 && <div style={{ fontSize: 11, color: C.sub, marginTop: 5 }}>{mlCos.length} compan{mlCos.length === 1 ? 'y' : 'ies'} selected</div>}
+                <label style={lbl}>Assignment *</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', border: `1px solid ${mlPlatform ? BRAND : C.cardBorder}`, borderRadius: 8, cursor: 'pointer', background: mlPlatform ? C.selBg : C.inputBg, marginBottom: 8 }}>
+                  <input type="checkbox" checked={mlPlatform} onChange={() => setMlPlatform(v => !v)} style={{ width: 15, height: 15, accentColor: BRAND, cursor: 'pointer' }} />
+                  <span style={{ fontSize: 12.5, color: C.label, fontWeight: 600 }}>🌐 Distribute on platform <span style={{ color: C.muted, fontWeight: 400 }}>— auto-match like a website lead (spinnable)</span></span>
+                </label>
+                {!mlPlatform && (
+                  <>
+                    <div style={{ maxHeight: 150, overflowY: 'auto', border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 6, background: C.inputBg }}>
+                      {assignCos.length === 0 && <div style={{ fontSize: 12, color: C.muted, padding: 6 }}>No companies found.</div>}
+                      {assignCos.map(co => {
+                        const on = mlCos.includes(co.id)
+                        return (
+                          <label key={co.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px', cursor: 'pointer', borderRadius: 6, background: on ? C.selBg : 'transparent' }}>
+                            <input type="checkbox" checked={on} onChange={() => toggleMlCo(co.id)} style={{ width: 15, height: 15, accentColor: BRAND, cursor: 'pointer' }} />
+                            <span style={{ fontSize: 12.5, color: C.label }}>{co.name}{co.category ? ' · ' + co.category : ''}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {mlCos.length > 0 && <div style={{ fontSize: 11, color: C.sub, marginTop: 5 }}>{mlCos.length} compan{mlCos.length === 1 ? 'y' : 'ies'} selected</div>}
+                  </>
+                )}
               </div>
               <div>
                 <label style={lbl}>Notes (optional)</label>
