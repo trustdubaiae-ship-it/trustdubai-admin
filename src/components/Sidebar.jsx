@@ -71,6 +71,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { id: 'plan_approvals',icon: 'ti-credit-card',       label: 'Plan Approvals',     show: isSales || isAccounts || isSuperAdmin },
     { id: 'sponsor_slots', icon: 'ti-ad-2',              label: 'Sponsor Slots',      show: isSuperAdmin },
     { id: 'accounts',      icon: 'ti-report-money',      label: 'Revenue & Accounts', show: isAccounts || isSuperAdmin },
+    { id: 'partners',      icon: 'ti-friends',           label: 'Partners',           show: isAccounts || isSuperAdmin },
 
     { section: 'CONFIG' },
     { group: 'controlpanel', icon: 'ti-adjustments', label: 'Control Panel', show: true, children: [

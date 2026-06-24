@@ -18,6 +18,7 @@ import DocumentVerification from './pages/DocumentVerification'
 import Applications from './pages/ApplicationsPage'
 import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
+import PartnersPage from './pages/PartnersPage'
 import Leads from './pages/Leads'
 import LeadManagement from './pages/LeadManagement'
 import LeadForms from './pages/LeadForms'
@@ -257,6 +258,7 @@ export default function App() {
         {page === 'duplicate_claims'  && <DuplicateClaims />}
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
         {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}
+        {page === 'partners'          && (isAccounts || isSuperAdmin) && <PartnersPage theme={theme} />}
         {page === 'users'             && isSuperAdmin && <Users />}
         {page === 'reports'           && <Reports />}
         {page === 'disputes'          && <Disputes />}
