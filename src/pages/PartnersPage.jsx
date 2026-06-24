@@ -8,31 +8,42 @@ export default function PartnersPage({ theme }) {
   const dark = theme !== 'light'
   const [partners, setPartners] = useState([])
   const [payouts, setPayouts] = useState([])
+  const [bankMap, setBankMap] = useState({})
+  const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2 })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    const [pRes, oRes] = await Promise.all([
+    const [pRes, oRes, bRes, sRes] = await Promise.all([
       supabase.rpc('admin_partner_overview'),
       supabase.from('qv_partner_payouts').select('*').order('created_at', { ascending: false }),
+      supabase.from('qv_partners').select('id, payout_info'),
+      supabase.from('qv_settings').select('*'),
     ])
     setPartners(pRes.data || [])
     setPayouts(oRes.data || [])
+    const bm = {}; (bRes.data || []).forEach(p => { bm[p.id] = p.payout_info || {} }); setBankMap(bm)
+    if (sRes.data) { const m = {}; sRes.data.forEach(r => { m[r.key] = Number(r.value) }); setSettings(s => ({ ...s, ...m })) }
     setLoading(false)
   }
   async function setStatus(id, status) { setBusy(id); await supabase.from('qv_partners').update({ status }).eq('id', id); await load(); setBusy('') }
   async function saveField(id, patch) { await supabase.from('qv_partners').update(patch).eq('id', id); load() }
+  async function saveSetting(key, value) {
+    const v = Number(value); if (!Number.isFinite(v)) return
+    await supabase.from('qv_settings').upsert({ key, value: v }, { onConflict: 'key' })
+    setSettings(s => ({ ...s, [key]: v }))
+  }
   async function markPaid(p) {
+    const b = bankMap[p.partner_id] || {}
+    const detail = b.iban ? `\n\nBank: ${b.bank_name || ''}\nIBAN: ${b.iban}\nHolder: ${b.account_holder || ''}` : ''
+    if (!window.confirm(`Mark AED ${p.amount} to ${partnerName(p.partner_id)} as PAID?\nTransfer the amount to their bank first.${detail}`)) return
     setBusy(p.id)
     try {
-      // real Stripe Connect transfer to the partner, then mark paid
-      const { data, error } = await supabase.functions.invoke('partner-payout', { body: { payoutId: p.id } })
-      if (error) { let m = 'Payout failed'; try { m = (await error.context.json())?.error || m } catch {} ; alert(m); return }
-      if (!data?.ok) { alert(data?.error || 'Payout failed'); return }
+      await supabase.from('qv_partner_payouts').update({ status: 'paid', paid_on: new Date().toISOString().slice(0, 10), method: 'bank' }).eq('id', p.id)
       await load()
-    } catch (e) { alert('Payout failed: ' + (e?.message || e)) } finally { setBusy('') }
+    } catch (e) { alert('Failed: ' + (e?.message || e)) } finally { setBusy('') }
   }
 
   const bg = dark ? '#0f172a' : '#f8fafc'
@@ -51,20 +62,38 @@ export default function PartnersPage({ theme }) {
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}><i className="ti ti-friends" /> Partners</h1>
           <div style={{ fontSize: 13, color: sub, marginTop: 2 }}>Resellers, commissions & payouts</div>
         </div>
-        <button onClick={load} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${border}`, background: cardBg, color: text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}><i className="ti ti-refresh" /> Refresh</button>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: sub }}>Min payout AED</span>
+            <input type="number" defaultValue={settings.min_payout} onBlur={e => saveSetting('min_payout', e.target.value)} style={{ ...inp, width: 70 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: sub }}>Claims/month</span>
+            <input type="number" defaultValue={settings.claims_per_month} onBlur={e => saveSetting('claims_per_month', e.target.value)} style={{ ...inp, width: 50 }} />
+          </div>
+          <button onClick={load} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${border}`, background: cardBg, color: text, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}><i className="ti ti-refresh" /> Refresh</button>
+        </div>
       </div>
 
       {/* payout requests */}
       {requested.length > 0 && (
         <div style={{ background: cardBg, border: `1px solid ${border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: '#f59e0b' }}><i className="ti ti-bell-ringing" /> Payout requests ({requested.length})</div>
-          {requested.map(p => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: `1px solid ${border}`, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 160 }}><b>{partnerName(p.partner_id)}</b><span style={{ color: sub, fontSize: 12 }}> · {p.period || '—'}</span></div>
-              <span style={{ fontSize: 14, fontWeight: 700 }}>{AED(p.amount)}</span>
-              <button onClick={() => markPaid(p)} disabled={busy === p.id} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>{busy === p.id ? '…' : 'Mark paid'}</button>
-            </div>
-          ))}
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: '#f59e0b' }}><i className="ti ti-bell-ringing" /> Payout requests ({requested.length}) — transfer to the bank below, then mark paid</div>
+          {requested.map(p => {
+            const b = bankMap[p.partner_id] || {}
+            return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: `1px solid ${border}`, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <b>{partnerName(p.partner_id)}</b><span style={{ color: sub, fontSize: 12 }}> · {p.period || '—'}</span>
+                  {b.iban
+                    ? <div style={{ fontSize: 11.5, color: sub, marginTop: 3 }}>{b.bank_name || 'Bank'} · IBAN <b style={{ color: text, fontFamily: 'monospace' }}>{b.iban}</b>{b.account_holder ? ' · ' + b.account_holder : ''}{b.swift ? ' · ' + b.swift : ''}</div>
+                    : <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 3 }}>⚠ No bank details on file</div>}
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{AED(p.amount)}</span>
+                <button onClick={() => markPaid(p)} disabled={busy === p.id} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>{busy === p.id ? '…' : 'Mark paid'}</button>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -104,7 +133,7 @@ export default function PartnersPage({ theme }) {
                         <td style={{ padding: '10px 6px' }}>{AED(p.paid_out)}</td>
                         <td style={{ padding: '10px 6px' }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: STC[p.status] || sub, background: (STC[p.status] || sub) + '22', padding: '3px 9px', borderRadius: 99, textTransform: 'capitalize' }}>{p.status}</span>
-                          <div style={{ fontSize: 10, color: p.payouts_enabled ? '#22c55e' : sub, marginTop: 4 }}>{p.payouts_enabled ? '💳 payouts on' : 'no payout setup'}</div>
+                          <div style={{ fontSize: 10, color: bankMap[p.id]?.iban ? '#22c55e' : sub, marginTop: 4 }}>{bankMap[p.id]?.iban ? '🏦 bank added' : 'no bank details'}</div>
                         </td>
                         <td style={{ padding: '10px 6px', whiteSpace: 'nowrap' }}>
                           {p.status === 'pending' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Approve</button>}
