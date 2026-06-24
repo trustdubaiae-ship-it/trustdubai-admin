@@ -26,8 +26,13 @@ export default function PartnersPage({ theme }) {
   async function saveField(id, patch) { await supabase.from('qv_partners').update(patch).eq('id', id); load() }
   async function markPaid(p) {
     setBusy(p.id)
-    await supabase.from('qv_partner_payouts').update({ status: 'paid', paid_on: new Date().toISOString().slice(0, 10) }).eq('id', p.id)
-    await load(); setBusy('')
+    try {
+      // real Stripe Connect transfer to the partner, then mark paid
+      const { data, error } = await supabase.functions.invoke('partner-payout', { body: { payoutId: p.id } })
+      if (error) { let m = 'Payout failed'; try { m = (await error.context.json())?.error || m } catch {} ; alert(m); return }
+      if (!data?.ok) { alert(data?.error || 'Payout failed'); return }
+      await load()
+    } catch (e) { alert('Payout failed: ' + (e?.message || e)) } finally { setBusy('') }
   }
 
   const bg = dark ? '#0f172a' : '#f8fafc'
@@ -97,7 +102,10 @@ export default function PartnersPage({ theme }) {
                         </td>
                         <td style={{ padding: '10px 6px' }}>{p.referred_paid}<span style={{ color: sub }}> / {p.referred_total}</span></td>
                         <td style={{ padding: '10px 6px' }}>{AED(p.paid_out)}</td>
-                        <td style={{ padding: '10px 6px' }}><span style={{ fontSize: 11, fontWeight: 700, color: STC[p.status] || sub, background: (STC[p.status] || sub) + '22', padding: '3px 9px', borderRadius: 99, textTransform: 'capitalize' }}>{p.status}</span></td>
+                        <td style={{ padding: '10px 6px' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: STC[p.status] || sub, background: (STC[p.status] || sub) + '22', padding: '3px 9px', borderRadius: 99, textTransform: 'capitalize' }}>{p.status}</span>
+                          <div style={{ fontSize: 10, color: p.payouts_enabled ? '#22c55e' : sub, marginTop: 4 }}>{p.payouts_enabled ? '💳 payouts on' : 'no payout setup'}</div>
+                        </td>
                         <td style={{ padding: '10px 6px', whiteSpace: 'nowrap' }}>
                           {p.status === 'pending' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Approve</button>}
                           {p.status === 'active' && <button onClick={() => setStatus(p.id, 'paused')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${border}`, background: 'transparent', color: sub, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Pause</button>}
