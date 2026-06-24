@@ -252,6 +252,8 @@ export default function ApplicationsPage() {
         location: app.location || '',
         phone: app.phone || '',
         whatsapp: app.whatsapp || app.phone || '',
+        // carry the partner referral over so the partner gets credited
+        ...(app.referred_by_partner_id ? { referred_by_partner_id: app.referred_by_partner_id } : {}),
       }).eq('id', existing.id)
       if (updErr) alert('Application approved but company update failed: ' + updErr.message)
     } else {
@@ -273,6 +275,8 @@ export default function ApplicationsPage() {
         plan: 'free',
         is_verified: false,
         created_at: new Date().toISOString(),
+        // carry the partner referral over so the partner gets credited
+        referred_by_partner_id: app.referred_by_partner_id || null,
       })
       if (insertError) alert('Application approved but company insert failed: ' + insertError.message)
     }
