@@ -20,7 +20,7 @@ export default function PartnersPage({ theme }) {
     const [pRes, oRes, bRes, sRes] = await Promise.all([
       supabase.rpc('admin_partner_overview'),
       supabase.from('qv_partner_payouts').select('*').order('created_at', { ascending: false }),
-      supabase.from('qv_partners').select('id, payout_info, payment_status, docs_verified, tier, fee_monthly, documents'),
+      supabase.from('qv_partners').select('id, payout_info, payment_status, docs_verified, bank_verified, tier, fee_monthly, documents'),
       supabase.from('qv_settings').select('*'),
     ])
     setPartners(pRes.data || [])
@@ -31,6 +31,12 @@ export default function PartnersPage({ theme }) {
   }
   async function setStatus(id, status) { setBusy(id); await supabase.from('qv_partners').update({ status }).eq('id', id); await load(); setBusy('') }
   async function verifyDocs(id, val) { setBusy(id); await supabase.from('qv_partners').update({ docs_verified: val }).eq('id', id); await load(); setBusy('') }
+  async function verifyBank(id) {
+    const b = bankMap[id] || {}
+    if (!b.iban) { alert('No bank details on file yet.'); return }
+    if (!window.confirm(`Confirm the account is correct before verifying:\n\nHolder: ${b.account_holder || '—'}\nBank: ${b.bank_name || '—'}\nIBAN: ${b.iban}${b.swift ? '\nSWIFT: ' + b.swift : ''}`)) return
+    setBusy(id); await supabase.from('qv_partners').update({ bank_verified: true }).eq('id', id); await load(); setBusy('')
+  }
   function viewDoc(dataUrl) { if (!dataUrl) return; const w = window.open(); if (w) w.document.write(`<iframe src="${dataUrl}" style="border:0;width:100%;height:100%"></iframe>`) }
   async function saveField(id, patch) { await supabase.from('qv_partners').update(patch).eq('id', id); load() }
   async function saveSetting(key, value) {
@@ -142,7 +148,7 @@ export default function PartnersPage({ theme }) {
                             <div style={{ fontSize: 10, marginTop: 4, lineHeight: 1.55 }}>
                               <div style={{ color: m.payment_status === 'active' ? '#22c55e' : '#ef4444' }}>{m.payment_status === 'active' ? '💳 paid' : '✗ unpaid'}</div>
                               <div style={{ color: m.docs_verified ? '#22c55e' : upl ? '#f59e0b' : '#ef4444' }}>{m.docs_verified ? '✓ docs verified' : upl ? 'docs uploaded' : 'docs missing'}</div>
-                              <div style={{ color: bankMap[p.id]?.iban ? '#22c55e' : sub }}>{bankMap[p.id]?.iban ? '🏦 bank' : 'no bank'}</div>
+                              <div style={{ color: bankMap[p.id]?.iban ? (m.bank_verified ? '#22c55e' : '#f59e0b') : sub }}>{bankMap[p.id]?.iban ? (m.bank_verified ? '🏦 bank ✓' : '🏦 bank · unverified') : 'no bank'}</div>
                             </div>
                           ) })()}
                         </td>
@@ -153,9 +159,10 @@ export default function PartnersPage({ theme }) {
                                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                   {d.emirates_id && <button onClick={() => viewDoc(d.emirates_id)} style={miniBtn}>EID</button>}
                                   {d.trade_license && <button onClick={() => viewDoc(d.trade_license)} style={miniBtn}>License</button>}
-                                  {upl && !m.docs_verified && <button onClick={() => verifyDocs(p.id, true)} disabled={busy === p.id} style={{ ...miniBtn, background: '#0099cc', color: '#fff', border: 'none' }}>Verify ✓</button>}
+                                  {upl && !m.docs_verified && <button onClick={() => verifyDocs(p.id, true)} disabled={busy === p.id} style={{ ...miniBtn, background: '#0099cc', color: '#fff', border: 'none' }}>Verify docs ✓</button>}
                                 </div>
                               )}
+                              {bankMap[p.id]?.iban && !m.bank_verified && <button onClick={() => verifyBank(p.id)} disabled={busy === p.id} style={{ ...miniBtn, background: '#7c3aed', color: '#fff', border: 'none' }}>Verify bank ✓</button>}
                               {p.status === 'pending' && <button onClick={() => { if (!ready && !window.confirm('Payment or documents not complete/verified. Activate anyway?')) return; setStatus(p.id, 'active') }} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: ready ? '#22c55e' : '#94a3b8', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{ready ? 'Activate' : 'Activate (override)'}</button>}
                               {p.status === 'active' && <button onClick={() => setStatus(p.id, 'paused')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${border}`, background: 'transparent', color: sub, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Pause</button>}
                               {p.status === 'paused' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Reactivate</button>}
