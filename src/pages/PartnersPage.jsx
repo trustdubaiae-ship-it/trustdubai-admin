@@ -9,6 +9,7 @@ export default function PartnersPage({ theme }) {
   const [partners, setPartners] = useState([])
   const [payouts, setPayouts] = useState([])
   const [bankMap, setBankMap] = useState({})
+  const [metaMap, setMetaMap] = useState({})
   const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2 })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
@@ -19,16 +20,18 @@ export default function PartnersPage({ theme }) {
     const [pRes, oRes, bRes, sRes] = await Promise.all([
       supabase.rpc('admin_partner_overview'),
       supabase.from('qv_partner_payouts').select('*').order('created_at', { ascending: false }),
-      supabase.from('qv_partners').select('id, payout_info'),
+      supabase.from('qv_partners').select('id, payout_info, payment_status, docs_verified, tier, fee_monthly, documents'),
       supabase.from('qv_settings').select('*'),
     ])
     setPartners(pRes.data || [])
     setPayouts(oRes.data || [])
-    const bm = {}; (bRes.data || []).forEach(p => { bm[p.id] = p.payout_info || {} }); setBankMap(bm)
+    const bm = {}, mm = {}; (bRes.data || []).forEach(p => { bm[p.id] = p.payout_info || {}; mm[p.id] = p }); setBankMap(bm); setMetaMap(mm)
     if (sRes.data) { const m = {}; sRes.data.forEach(r => { m[r.key] = Number(r.value) }); setSettings(s => ({ ...s, ...m })) }
     setLoading(false)
   }
   async function setStatus(id, status) { setBusy(id); await supabase.from('qv_partners').update({ status }).eq('id', id); await load(); setBusy('') }
+  async function verifyDocs(id, val) { setBusy(id); await supabase.from('qv_partners').update({ docs_verified: val }).eq('id', id); await load(); setBusy('') }
+  function viewDoc(dataUrl) { if (!dataUrl) return; const w = window.open(); if (w) w.document.write(`<iframe src="${dataUrl}" style="border:0;width:100%;height:100%"></iframe>`) }
   async function saveField(id, patch) { await supabase.from('qv_partners').update(patch).eq('id', id); load() }
   async function saveSetting(key, value) {
     const v = Number(value); if (!Number.isFinite(v)) return
@@ -52,6 +55,7 @@ export default function PartnersPage({ theme }) {
   const sub = dark ? '#94a3b8' : '#64748b'
   const border = dark ? '#334155' : '#e2e8f0'
   const inp = { padding: '6px 8px', borderRadius: 7, border: `1px solid ${border}`, background: dark ? '#0f172a' : '#fff', color: text, fontSize: 13, width: 64 }
+  const miniBtn = { padding: '4px 9px', borderRadius: 6, border: `1px solid ${border}`, background: dark ? '#0f172a' : '#fff', color: text, cursor: 'pointer', fontSize: 11, fontWeight: 600 }
   const partnerName = (id) => partners.find(p => p.id === id)?.name || '—'
   const requested = payouts.filter(p => p.status === 'requested')
 
@@ -124,21 +128,39 @@ export default function PartnersPage({ theme }) {
                         <td style={{ padding: '10px 6px', fontFamily: 'monospace', fontWeight: 700, color: '#00b4d8' }}>{p.code}</td>
                         <td style={{ padding: '10px 6px' }}><input type="number" defaultValue={p.commission_pct} onBlur={e => { const v = Number(e.target.value); if (v !== Number(p.commission_pct)) saveField(p.id, { commission_pct: v }) }} style={inp} /></td>
                         <td style={{ padding: '10px 6px' }}>
-                          <select value={p.tier || 'standard'} onChange={e => saveField(p.id, { tier: e.target.value })} style={{ ...inp, width: 100 }}>
-                            <option value="standard">Standard</option>
-                            <option value="premium">Premium</option>
+                          <select value={p.tier || 'starter'} onChange={e => { const t = e.target.value; const c = { starter: 5, growth: 15, pro: 25 }[t]; saveField(p.id, { tier: t, commission_pct: c }) }} style={{ ...inp, width: 110 }}>
+                            <option value="starter">Starter (5%)</option>
+                            <option value="growth">Growth (15%)</option>
+                            <option value="pro">Pro (25%)</option>
                           </select>
                         </td>
                         <td style={{ padding: '10px 6px' }}>{p.referred_paid}<span style={{ color: sub }}> / {p.referred_total}</span></td>
                         <td style={{ padding: '10px 6px' }}>{AED(p.paid_out)}</td>
                         <td style={{ padding: '10px 6px' }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: STC[p.status] || sub, background: (STC[p.status] || sub) + '22', padding: '3px 9px', borderRadius: 99, textTransform: 'capitalize' }}>{p.status}</span>
-                          <div style={{ fontSize: 10, color: bankMap[p.id]?.iban ? '#22c55e' : sub, marginTop: 4 }}>{bankMap[p.id]?.iban ? '🏦 bank added' : 'no bank details'}</div>
+                          {(() => { const m = metaMap[p.id] || {}; const d = m.documents || {}; const upl = d.emirates_id && d.trade_license; return (
+                            <div style={{ fontSize: 10, marginTop: 4, lineHeight: 1.55 }}>
+                              <div style={{ color: m.payment_status === 'active' ? '#22c55e' : '#ef4444' }}>{m.payment_status === 'active' ? '💳 paid' : '✗ unpaid'}</div>
+                              <div style={{ color: m.docs_verified ? '#22c55e' : upl ? '#f59e0b' : '#ef4444' }}>{m.docs_verified ? '✓ docs verified' : upl ? 'docs uploaded' : 'docs missing'}</div>
+                              <div style={{ color: bankMap[p.id]?.iban ? '#22c55e' : sub }}>{bankMap[p.id]?.iban ? '🏦 bank' : 'no bank'}</div>
+                            </div>
+                          ) })()}
                         </td>
                         <td style={{ padding: '10px 6px', whiteSpace: 'nowrap' }}>
-                          {p.status === 'pending' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Approve</button>}
-                          {p.status === 'active' && <button onClick={() => setStatus(p.id, 'paused')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${border}`, background: 'transparent', color: sub, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Pause</button>}
-                          {p.status === 'paused' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Reactivate</button>}
+                          {(() => { const m = metaMap[p.id] || {}; const d = m.documents || {}; const upl = d.emirates_id && d.trade_license; const ready = m.payment_status === 'active' && m.docs_verified; return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                              {(d.emirates_id || d.trade_license) && (
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                  {d.emirates_id && <button onClick={() => viewDoc(d.emirates_id)} style={miniBtn}>EID</button>}
+                                  {d.trade_license && <button onClick={() => viewDoc(d.trade_license)} style={miniBtn}>License</button>}
+                                  {upl && !m.docs_verified && <button onClick={() => verifyDocs(p.id, true)} disabled={busy === p.id} style={{ ...miniBtn, background: '#0099cc', color: '#fff', border: 'none' }}>Verify ✓</button>}
+                                </div>
+                              )}
+                              {p.status === 'pending' && <button onClick={() => { if (!ready && !window.confirm('Payment or documents not complete/verified. Activate anyway?')) return; setStatus(p.id, 'active') }} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: ready ? '#22c55e' : '#94a3b8', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{ready ? 'Activate' : 'Activate (override)'}</button>}
+                              {p.status === 'active' && <button onClick={() => setStatus(p.id, 'paused')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${border}`, background: 'transparent', color: sub, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Pause</button>}
+                              {p.status === 'paused' && <button onClick={() => setStatus(p.id, 'active')} disabled={busy === p.id} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Reactivate</button>}
+                            </div>
+                          ) })()}
                         </td>
                       </tr>
                     ))}
