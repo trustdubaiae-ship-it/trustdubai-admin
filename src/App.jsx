@@ -19,7 +19,6 @@ import Applications from './pages/ApplicationsPage'
 import PlanApprovals from './pages/PlanApprovals'
 import Accounts from './pages/Accounts'
 import PartnersPage from './pages/PartnersPage'
-import PartnerProgram from './pages/PartnerProgram'
 import SuperAdminAI from './pages/SuperAdminAI'
 import Leads from './pages/Leads'
 import LeadManagement from './pages/LeadManagement'
@@ -52,7 +51,7 @@ const VALID_PAGES = new Set([
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
   'notifications','sponsor_slots','settings','badges_manager','claim_requests','duplicate_claims',
-  'ai_manager','partners','partner_program',
+  'ai_manager','partners',
 ])
 
 // Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
@@ -262,7 +261,6 @@ export default function App() {
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
         {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}
         {page === 'partners'          && (isAccounts || isSuperAdmin) && <PartnersPage theme={theme} />}
-        {page === 'partner_program'   && isSuperAdmin && <PartnerProgram theme={theme} />}
         {page === 'ai_manager'        && isSuperAdmin && <SuperAdminAI theme={theme} />}
         {page === 'users'             && isSuperAdmin && <Users />}
         {page === 'reports'           && <Reports />}

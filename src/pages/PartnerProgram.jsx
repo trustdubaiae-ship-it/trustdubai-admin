@@ -8,7 +8,7 @@ import { marginalCommission } from '../lib/commission'
 export default function PartnerProgram({ theme }) {
   const dark = theme !== 'light'
   const [slabs, setSlabs] = useState([])
-  const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2 })
+  const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2, plan_price: 799, plan_discount_pct: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -79,6 +79,34 @@ export default function PartnerProgram({ theme }) {
 
       {loading ? <div style={{ color: sub, padding: 20 }}>Loading…</div> : (
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))' }}>
+
+          {/* Partner plan price (single plan) */}
+          {(() => {
+            const orig = Number(settings.plan_price) || 0
+            const disc = Number(settings.plan_discount_pct) || 0
+            const eff = Math.round(orig * (1 - disc / 100) * 100) / 100
+            return (
+              <div style={{ background: cardBg, border: `1px solid ${border}`, borderRadius: 12, padding: 16, gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Partner plan price</div>
+                <div style={{ fontSize: 12, color: sub, marginBottom: 14, lineHeight: 1.5 }}>One plan for every partner. Set the original price and a discount — partners are charged the discounted amount monthly (+ 5% VAT).</div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ fontSize: 12, color: sub }}>Original price (AED)
+                    <input type="number" defaultValue={orig} onBlur={e => saveSetting('plan_price', e.target.value)} style={{ ...inp, display: 'block', marginTop: 5, width: 130 }} />
+                  </label>
+                  <label style={{ fontSize: 12, color: sub }}>Discount %
+                    <input type="number" defaultValue={disc} onBlur={e => saveSetting('plan_discount_pct', e.target.value)} style={{ ...inp, display: 'block', marginTop: 5, width: 110 }} />
+                  </label>
+                  <div style={{ padding: '8px 16px', borderRadius: 10, background: dark ? 'rgba(22,163,74,0.14)' : '#f0fdf4', border: `1px solid ${dark ? 'rgba(22,163,74,0.3)' : '#bbf7d0'}` }}>
+                    <div style={{ fontSize: 11, color: sub }}>Partner pays</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>
+                      AED {eff.toLocaleString('en-AE')}<span style={{ fontSize: 12, fontWeight: 600, color: sub }}>/mo</span>
+                      {disc > 0 && <span style={{ fontSize: 12, color: sub, textDecoration: 'line-through', marginLeft: 8 }}>AED {orig.toLocaleString('en-AE')}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Commission slabs */}
           <div style={{ background: cardBg, border: `1px solid ${border}`, borderRadius: 12, padding: 16, gridColumn: '1 / -1' }}>

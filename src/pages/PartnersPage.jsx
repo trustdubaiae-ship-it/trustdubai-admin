@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { marginalCommission } from '../lib/commission'
+import PartnerProgram from './PartnerProgram'
 
 const AED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-AE')
 const STC = { active: '#22c55e', pending: '#f59e0b', paused: '#94a3b8' }
@@ -13,6 +14,7 @@ export default function PartnersPage({ theme }) {
   const [metaMap, setMetaMap] = useState({})
   const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2 })
   const [slabs, setSlabs] = useState([])
+  const [view, setView] = useState('list')   // 'list' | 'settings'
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
 
@@ -69,8 +71,28 @@ export default function PartnersPage({ theme }) {
   const partnerName = (id) => partners.find(p => p.id === id)?.name || '—'
   const requested = payouts.filter(p => p.status === 'requested')
 
+  const TabBar = () => (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+      {[['list', 'Partners', 'ti-friends'], ['settings', 'Program Settings', 'ti-adjustments-dollar']].map(([id, label, ic]) => (
+        <button key={id} onClick={() => setView(id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1px solid ${view === id ? '#0099cc' : border}`, background: view === id ? (dark ? 'rgba(0,153,204,0.14)' : '#e0f9ff') : cardBg, color: view === id ? '#0099cc' : sub, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+          <i className={'ti ' + ic} /> {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (view === 'settings') {
+    return (
+      <div style={{ background: bg, minHeight: '100vh' }}>
+        <div style={{ padding: 'clamp(14px,3vw,28px) clamp(14px,3vw,28px) 0' }}><TabBar /></div>
+        <PartnerProgram theme={theme} />
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 'clamp(14px,3vw,28px)', background: bg, minHeight: '100vh', color: text }}>
+      <TabBar />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}><i className="ti ti-friends" /> Partners</h1>
