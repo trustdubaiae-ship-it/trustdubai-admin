@@ -101,6 +101,15 @@ export default function Companies({ initialPlanFilter }) {
   const [portalTotal, setPortalTotal] = useState(0)
   const [importedTotal, setImportedTotal] = useState(0)
   const [newC, setNewC] = useState({ name: '', category: '', area: '', phone: '', whatsapp: '', email: '', description: '' })
+  const [partnerMap, setPartnerMap] = useState({})   // partner id -> { code, name } for "Referred by"
+
+  // Map referred_by_partner_id -> partner code/name (admin-safe RPC, gated by is_admin)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc('admin_partner_overview')
+      const m = {}; (data || []).forEach(p => { m[p.id] = { code: p.code, name: p.name } }); setPartnerMap(m)
+    })()
+  }, [])
 
   useEffect(() => {
     fetchAdminData()
@@ -472,7 +481,7 @@ export default function Companies({ initialPlanFilter }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: bgRow }}>
-                    {['Company', 'Category', 'Source', 'Plan', 'Performance', 'Expiry', 'Status', 'Actions'].map(h => (
+                    {['Company', 'Category', 'Source', 'Plan', 'Performance', 'Expiry', 'Status', 'Referred by', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: textSub, borderBottom: '1px solid ' + borderCol }}>{h}</th>
                     ))}
                   </tr>
@@ -526,6 +535,12 @@ export default function Companies({ initialPlanFilter }) {
                             <span style={{ background: c.status === 'approved' ? (isDark ? 'rgba(30,142,62,0.2)' : '#e6f4ea') : (isDark ? 'rgba(232,184,75,0.2)' : '#fef9ed'), color: c.status === 'approved' ? '#1e8e3e' : '#92400e', fontSize: 11, padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>{c.status}</span>
                             {truthy(c.is_verified) && <span style={{ background: isDark ? 'rgba(3,193,245,0.15)' : '#e0f9ff', color: '#03C1F5', fontSize: 11, padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>✓ Verified</span>}
                           </div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }} onClick={() => setDetailC(c)}>
+                          {(() => { const rp = c.referred_by_partner_id ? partnerMap[c.referred_by_partner_id] : null
+                            return rp
+                              ? <span title={rp.name || ''} style={{ fontSize: 11.5, fontWeight: 700, color: '#7c3aed', background: isDark ? 'rgba(124,58,237,0.16)' : '#f5f3ff', padding: '3px 9px', borderRadius: 99, fontFamily: 'monospace' }}>{rp.code}</span>
+                              : (c.referred_by_partner_id ? <span style={{ fontSize: 11, color: textMuted, fontFamily: 'monospace' }} title={c.referred_by_partner_id}>linked</span> : <span style={{ fontSize: 12, color: textMuted }}>—</span>) })()}
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -693,6 +708,7 @@ export default function Companies({ initialPlanFilter }) {
                   {row('Location', detailC.area || detailC.location)}
                   {row('Category', detailC.category)}
                   {row('Performance Score', score.toFixed(1) + ' / 10')}
+                  {row('Referred by', (() => { const rp = detailC.referred_by_partner_id ? partnerMap[detailC.referred_by_partner_id] : null; return rp ? `${rp.code}${rp.name ? ' · ' + rp.name : ''}` : (detailC.referred_by_partner_id ? 'Partner linked' : null) })())}
                   {row('Slug / URL', detailC.slug ? 'quvera.ae/' + detailC.slug : null)}
                   {row('Plan', plan.label + (detailC.plan_expires_at ? ' · ' + (expiry?.label || '') : ''))}
                   {row('Plan Started', detailC.plan_started_at ? new Date(detailC.plan_started_at).toLocaleDateString('en-AE') : null)}
