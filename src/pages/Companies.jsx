@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
-const CATS = ['Interior Design','Renovation','Technical Contracting','Fit-Out','AC Service','Plumbing','Electrical','Cleaning','Painting','Handyman','Restaurant','Gym','Medical','Legal','Salon','Hotel','Other']
+import { CATEGORIES as CATS } from '../lib/categories'
 
 const PLANS = {
   free:     { label: 'Free',     color: '#6b7280', bg: '#f3f4f6', price: 0 },
