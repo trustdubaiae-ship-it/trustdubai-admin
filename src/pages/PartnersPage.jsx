@@ -146,7 +146,6 @@ export default function PartnersPage({ theme }) {
                       <th style={{ padding: '8px 6px' }}>Partner</th>
                       <th style={{ padding: '8px 6px' }}>Code</th>
                       <th style={{ padding: '8px 6px' }}>Comm%</th>
-                      <th style={{ padding: '8px 6px' }}>Tier</th>
                       <th style={{ padding: '8px 6px' }}>Referred</th>
                       <th style={{ padding: '8px 6px' }}>Paid out</th>
                       <th style={{ padding: '8px 6px' }}>Status</th>
@@ -159,13 +158,6 @@ export default function PartnersPage({ theme }) {
                         <td style={{ padding: '10px 6px' }}><div style={{ fontWeight: 700 }}>{p.name}</div><div style={{ color: sub, fontSize: 11.5 }}>{p.email}{p.phone ? ' · ' + p.phone : ''}</div></td>
                         <td style={{ padding: '10px 6px', fontFamily: 'monospace', fontWeight: 700, color: '#00b4d8' }}>{p.code}</td>
                         <td style={{ padding: '10px 6px' }}>{(() => { const eff = marginalCommission(Number(p.referred_paid) || 0, slabs); return <span title={`Effective rate across ${p.referred_paid || 0} paying referrals (global slabs)`} style={{ fontWeight: 700, color: '#0099cc' }}>{eff.blendedPct.toFixed(1)}%</span> })()}</td>
-                        <td style={{ padding: '10px 6px' }}>
-                          <select value={p.tier || 'starter'} onChange={e => saveField(p.id, { tier: e.target.value })} style={{ ...inp, width: 120 }}>
-                            <option value="starter">Starter (AED 99)</option>
-                            <option value="growth">Growth (AED 199)</option>
-                            <option value="pro">Pro (AED 299)</option>
-                          </select>
-                        </td>
                         <td style={{ padding: '10px 6px' }}>{p.referred_paid}<span style={{ color: sub }}> / {p.referred_total}</span></td>
                         <td style={{ padding: '10px 6px' }}>{AED(p.paid_out)}</td>
                         <td style={{ padding: '10px 6px' }}>
