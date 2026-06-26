@@ -73,6 +73,7 @@ export default function Sidebar({ page, setPage, session, adminData, canAccess, 
     { id: 'sponsor_slots', icon: 'ti-ad-2',              label: 'Sponsor Slots',      show: isSuperAdmin },
     { id: 'accounts',      icon: 'ti-report-money',      label: 'Revenue & Accounts', show: isAccounts || isSuperAdmin },
     { id: 'partners',      icon: 'ti-friends',           label: 'Partners',           show: isAccounts || isSuperAdmin },
+    { id: 'partner_program', icon: 'ti-adjustments-dollar', label: 'Partner Program',   show: isSuperAdmin },
 
     { section: 'CONFIG' },
     { group: 'controlpanel', icon: 'ti-adjustments', label: 'Control Panel', show: true, children: [

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { marginalCommission } from '../lib/commission'
 
 const AED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-AE')
 const STC = { active: '#22c55e', pending: '#f59e0b', paused: '#94a3b8' }
@@ -11,20 +12,23 @@ export default function PartnersPage({ theme }) {
   const [bankMap, setBankMap] = useState({})
   const [metaMap, setMetaMap] = useState({})
   const [settings, setSettings] = useState({ min_payout: 100, claims_per_month: 2 })
+  const [slabs, setSlabs] = useState([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    const [pRes, oRes, bRes, sRes] = await Promise.all([
+    const [pRes, oRes, bRes, sRes, cRes] = await Promise.all([
       supabase.rpc('admin_partner_overview'),
       supabase.from('qv_partner_payouts').select('*').order('created_at', { ascending: false }),
       supabase.from('qv_partners').select('id, payout_info, payment_status, docs_verified, bank_verified, tier, fee_monthly, documents'),
       supabase.from('qv_settings').select('*'),
+      supabase.from('qv_commission_tiers').select('*').order('sort', { ascending: true }),
     ])
     setPartners(pRes.data || [])
     setPayouts(oRes.data || [])
+    setSlabs(cRes.data || [])
     const bm = {}, mm = {}; (bRes.data || []).forEach(p => { bm[p.id] = p.payout_info || {}; mm[p.id] = p }); setBankMap(bm); setMetaMap(mm)
     if (sRes.data) { const m = {}; sRes.data.forEach(r => { m[r.key] = Number(r.value) }); setSettings(s => ({ ...s, ...m })) }
     setLoading(false)
@@ -132,12 +136,12 @@ export default function PartnersPage({ theme }) {
                       <tr key={p.id} style={{ borderTop: `1px solid ${border}` }}>
                         <td style={{ padding: '10px 6px' }}><div style={{ fontWeight: 700 }}>{p.name}</div><div style={{ color: sub, fontSize: 11.5 }}>{p.email}{p.phone ? ' · ' + p.phone : ''}</div></td>
                         <td style={{ padding: '10px 6px', fontFamily: 'monospace', fontWeight: 700, color: '#00b4d8' }}>{p.code}</td>
-                        <td style={{ padding: '10px 6px' }}><input type="number" defaultValue={p.commission_pct} onBlur={e => { const v = Number(e.target.value); if (v !== Number(p.commission_pct)) saveField(p.id, { commission_pct: v }) }} style={inp} /></td>
+                        <td style={{ padding: '10px 6px' }}>{(() => { const eff = marginalCommission(Number(p.referred_paid) || 0, slabs); return <span title={`Effective rate across ${p.referred_paid || 0} paying referrals (global slabs)`} style={{ fontWeight: 700, color: '#0099cc' }}>{eff.blendedPct.toFixed(1)}%</span> })()}</td>
                         <td style={{ padding: '10px 6px' }}>
-                          <select value={p.tier || 'starter'} onChange={e => { const t = e.target.value; const c = { starter: 5, growth: 15, pro: 25 }[t]; saveField(p.id, { tier: t, commission_pct: c }) }} style={{ ...inp, width: 110 }}>
-                            <option value="starter">Starter (5%)</option>
-                            <option value="growth">Growth (15%)</option>
-                            <option value="pro">Pro (25%)</option>
+                          <select value={p.tier || 'starter'} onChange={e => saveField(p.id, { tier: e.target.value })} style={{ ...inp, width: 120 }}>
+                            <option value="starter">Starter (AED 99)</option>
+                            <option value="growth">Growth (AED 199)</option>
+                            <option value="pro">Pro (AED 299)</option>
                           </select>
                         </td>
                         <td style={{ padding: '10px 6px' }}>{p.referred_paid}<span style={{ color: sub }}> / {p.referred_total}</span></td>
@@ -177,7 +181,7 @@ export default function PartnersPage({ theme }) {
             )}
       </div>
 
-      <div style={{ fontSize: 11.5, color: sub, marginTop: 14 }}>Tip: set a partner to <b>Premium</b> and bump their Comm% (e.g. 30) for top performers. Commission auto-applies to their referrals.</div>
+      <div style={{ fontSize: 11.5, color: sub, marginTop: 14 }}>Comm% is the <b>effective</b> rate from the global commission slabs (set on the <b>Partner Program</b> page), based on each partner's paying referrals. Tier = the monthly plan fee only.</div>
     </div>
   )
 }
