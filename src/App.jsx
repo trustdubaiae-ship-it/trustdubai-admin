@@ -51,6 +51,7 @@ const VALID_PAGES = new Set([
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
   'notifications','sponsor_slots','settings','badges_manager','claim_requests','duplicate_claims',
+  'ai_manager','partners',
 ])
 
 // Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
