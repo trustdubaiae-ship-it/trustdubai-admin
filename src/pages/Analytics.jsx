@@ -3,8 +3,8 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 
 /* ============================================================================
-   TrustDubai — AI Command Center
-   Real-time insights & analytics for the TrustDubai platform.
+   Quvera — Platform Analytics
+   Real-time insights & analytics for the Quvera platform.
    Layout: even "tile wall" — a single 12-column grid (Option B). Every section
    is a tile; the Live Activity feed is a tile too (no side rail), so the board
    is wide + short and fits ONE screen in fullscreen without distortion.
@@ -754,7 +754,7 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
             <i className="ti ti-sparkles" style={{ fontSize: 20, color: '#fff' }} />
           </div>
           <div>
-            <div style={{ fontSize: mobile ? 18 : 22, fontWeight: 800, letterSpacing: '-0.5px' }}>AI Command Center</div>
+            <div style={{ fontSize: mobile ? 18 : 22, fontWeight: 800, letterSpacing: '-0.5px' }}>Platform Analytics</div>
             <div style={{ fontSize: 11, color: C.t2, marginTop: 1 }}>Real-time insights & analytics for Quvera Platform</div>
           </div>
         </div>
