@@ -15,9 +15,16 @@ export default function GoogleSearchPanel({ C, F, mobile }) {
     setState('loading')
     try {
       const { data: res, error } = await supabase.functions.invoke('gsc-insights', { body: { days: d } })
-      if (error) { setErr('Couldn’t reach Search Console.'); setState('error'); return }
+      if (error) {
+        // The function returns a JSON body (with a `detail`) even on 4xx/5xx, but
+        // supabase-js hides it behind error.context — read it for the real reason.
+        let detail = ''
+        try { const body = await error.context?.json?.(); detail = body?.detail || body?.error || '' } catch { /* ignore */ }
+        setErr(detail ? `Couldn’t reach Search Console — ${detail}` : 'Couldn’t reach Search Console.')
+        setState('error'); return
+      }
       if (res?.configured === false) { setData(res); setState('unconfigured'); return }
-      if (res?.error) { setErr(res.error); setState('error'); return }
+      if (res?.error) { setErr(res.detail ? `${res.error} — ${res.detail}` : res.error); setState('error'); return }
       setData(res); setState('ok')
     } catch (e) { setErr('Something went wrong.'); setState('error') }
   }, [])
