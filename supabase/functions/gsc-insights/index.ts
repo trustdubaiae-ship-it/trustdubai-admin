@@ -25,7 +25,13 @@ const b64url = (buf: ArrayBuffer | Uint8Array) => {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 const pemToDer = (pem: string) => {
-  const body = pem.replace(/-----BEGIN [^-]+-----/, "").replace(/-----END [^-]+-----/, "").replace(/\s+/g, "");
+  // Keep ONLY valid base64 characters. This survives keys whose newlines arrived
+  // as real line breaks, literal "\n" text (double-escaped in the secret), or
+  // stray whitespace — all of which would otherwise break atob().
+  const body = pem
+    .replace(/-----BEGIN [^-]+-----/, "")
+    .replace(/-----END [^-]+-----/, "")
+    .replace(/[^A-Za-z0-9+/=]/g, "");
   const bin = atob(body); const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out.buffer;
