@@ -16,7 +16,7 @@ export default function GoogleSearchPanel({ C, F, mobile }) {
     try {
       const { data: res, error } = await supabase.functions.invoke('gsc-insights', { body: { days: d } })
       if (error) { setErr('Couldn’t reach Search Console.'); setState('error'); return }
-      if (res?.configured === false) { setState('unconfigured'); return }
+      if (res?.configured === false) { setData(res); setState('unconfigured'); return }
       if (res?.error) { setErr(res.error); setState('error'); return }
       setData(res); setState('ok')
     } catch (e) { setErr('Something went wrong.'); setState('error') }
@@ -63,6 +63,12 @@ export default function GoogleSearchPanel({ C, F, mobile }) {
           Add a Google service account with access to the Search Console property, then set the
           <code style={{ color: C.t1 }}> GSC_SA_JSON </code> and <code style={{ color: C.t1 }}> GSC_SITE_URL </code>
           secrets and deploy the <code style={{ color: C.t1 }}>gsc-insights</code> function.
+          {data?.missing?.length > 0 && (
+            <div style={{ marginTop: 8, color: C.amber }}>Missing secret(s): <b>{data.missing.join(', ')}</b></div>
+          )}
+          {data?.seenGscVars && (
+            <div style={{ marginTop: 4, color: C.t3 }}>Secrets the function can see: {data.seenGscVars.length ? data.seenGscVars.join(', ') : '(none starting with GSC)'}</div>
+          )}
         </div>
       )}
 

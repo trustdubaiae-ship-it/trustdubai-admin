@@ -94,7 +94,15 @@ Deno.serve(async (req) => {
   // --- config ---
   const saRaw = Deno.env.get("GSC_SA_JSON");
   const siteUrl = Deno.env.get("GSC_SITE_URL");
-  if (!saRaw || !siteUrl) return json({ configured: false, error: "Google Search Console isn't connected yet." });
+  if (!saRaw || !siteUrl) {
+    const missing = [];
+    if (!saRaw) missing.push("GSC_SA_JSON");
+    if (!siteUrl) missing.push("GSC_SITE_URL");
+    // Show which env-var names the function CAN see that look related (names only,
+    // never values) so a typo'd secret name is obvious.
+    const seen = Object.keys(Deno.env.toObject()).filter((k) => k.startsWith("GSC"));
+    return json({ configured: false, missing, seenGscVars: seen, error: "Google Search Console isn't connected yet." });
+  }
 
   let body: any = {}; try { body = await req.json(); } catch { /* ignore */ }
   const days = Math.min(180, Math.max(1, Number(body?.days) || 28));
