@@ -83,42 +83,34 @@ export default function GoogleSearchPanel({ C, F, mobile }) {
 
       {state === 'ok' && data && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
-            <Stat label="Clicks" value={fmt(data.totals.clicks)} color={C.indigo} />
-            <Stat label="Impressions" value={fmt(data.totals.impressions)} color={C.cyan} />
-            <Stat label="Avg CTR" value={data.totals.ctr} sub="%" color={C.green} />
-            <Stat label="Avg Position" value={data.totals.position} color={C.amber} />
-          </div>
+          {/* Left: the 4 headline stats (2×2). Right: Top queries as its own card. */}
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 14, alignItems: 'stretch' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start' }}>
+              <Stat label="Clicks" value={fmt(data.totals.clicks)} color={C.indigo} />
+              <Stat label="Impressions" value={fmt(data.totals.impressions)} color={C.cyan} />
+              <Stat label="Avg CTR" value={data.totals.ctr} sub="%" color={C.green} />
+              <Stat label="Avg Position" value={data.totals.position} color={C.amber} />
+            </div>
 
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.t3, margin: '4px 2px 8px' }}>Top queries</div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ color: C.t3, textAlign: 'left' }}>
-                  <th style={{ padding: '6px 8px', fontWeight: 700 }}>Query</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Clicks</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Impr.</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>CTR</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Pos.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topQueries.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: 14, color: C.t3, textAlign: 'center' }}>No search data in this range yet.</td></tr>
-                )}
-                {data.topQueries.map((q, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
-                    <td style={{ padding: '7px 8px', color: C.t1, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.query}</td>
-                    <td style={{ padding: '7px 8px', color: C.t1, fontWeight: 700, textAlign: 'right' }}>{q.clicks}</td>
-                    <td style={{ padding: '7px 8px', color: C.t2, textAlign: 'right' }}>{q.impressions}</td>
-                    <td style={{ padding: '7px 8px', color: C.t2, textAlign: 'right' }}>{q.ctr}%</td>
-                    <td style={{ padding: '7px 8px', color: C.t2, textAlign: 'right' }}>{q.position}</td>
-                  </tr>
+            <div style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: C.t3, marginBottom: 8 }}>Top queries</div>
+              <div className="an-scroll" style={{ maxHeight: 178, overflowY: 'auto', minHeight: 0 }}>
+                {data.topQueries.length === 0 ? (
+                  <div style={{ padding: '14px 4px', color: C.t3, fontSize: 12, textAlign: 'center' }}>No search data in this range yet.</div>
+                ) : data.topQueries.map((q, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 16, flexShrink: 0 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: C.t1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.query}</div>
+                      <div style={{ fontSize: 9.5, color: C.t3, marginTop: 1 }}>{fmt(q.impressions)} impr · {q.ctr}% CTR · pos {q.position}</div>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: C.t1, flexShrink: 0 }}>{q.clicks}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: 10.5, color: C.t3, marginTop: 10 }}>Range: {data.range.startDate} → {data.range.endDate} · Google data lags ~1–2 days.</div>
+          <div style={{ fontSize: 10.5, color: C.t3, marginTop: 12 }}>Range: {data.range.startDate} → {data.range.endDate} · Google data lags ~1–2 days.</div>
         </>
       )}
     </div>
