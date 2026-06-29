@@ -66,6 +66,23 @@ async function getAccessToken(sa: any): Promise<string> {
   return data.access_token as string;
 }
 
+// ---- mint a Google OAuth access token from a stored user refresh token ----
+// (avoids service-account keys entirely — the signed-in Google user's own GSC
+// access is used. Set GSC_OAUTH_CLIENT_ID / _SECRET / _REFRESH_TOKEN to use this.)
+async function getAccessTokenFromRefresh(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId, client_secret: clientSecret,
+      refresh_token: refreshToken, grant_type: "refresh_token",
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.access_token) throw new Error("oauth: " + (data.error_description || data.error || res.status));
+  return data.access_token as string;
+}
+
 async function gscQuery(token: string, siteUrl: string, body: unknown) {
   const res = await fetch(
     `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
@@ -98,12 +115,20 @@ Deno.serve(async (req) => {
   } catch (_e) { return json({ error: "Auth check failed." }, 401); }
 
   // --- config ---
-  const saRaw = Deno.env.get("GSC_SA_JSON");
+  // Two auth modes (OAuth preferred — no service-account key needed):
+  //   A) OAuth user refresh token: GSC_OAUTH_CLIENT_ID / _SECRET / _REFRESH_TOKEN
+  //   B) Service-account key JSON:  GSC_SA_JSON
   const siteUrl = Deno.env.get("GSC_SITE_URL");
-  if (!saRaw || !siteUrl) {
+  const oauthClientId = Deno.env.get("GSC_OAUTH_CLIENT_ID");
+  const oauthClientSecret = Deno.env.get("GSC_OAUTH_CLIENT_SECRET");
+  const oauthRefresh = Deno.env.get("GSC_OAUTH_REFRESH_TOKEN");
+  const saRaw = Deno.env.get("GSC_SA_JSON");
+  const haveOAuth = !!(oauthClientId && oauthClientSecret && oauthRefresh);
+  const haveSA = !!saRaw;
+  if (!siteUrl || (!haveOAuth && !haveSA)) {
     const missing = [];
-    if (!saRaw) missing.push("GSC_SA_JSON");
     if (!siteUrl) missing.push("GSC_SITE_URL");
+    if (!haveOAuth && !haveSA) missing.push("GSC_OAUTH_REFRESH_TOKEN (or GSC_SA_JSON)");
     // Show which env-var names the function CAN see that look related (names only,
     // never values) so a typo'd secret name is obvious.
     const seen = Object.keys(Deno.env.toObject()).filter((k) => k.startsWith("GSC"));
@@ -116,18 +141,23 @@ Deno.serve(async (req) => {
   const start = new Date(); start.setDate(start.getDate() - days);
 
   try {
-    // GSC_SA_JSON may be the raw service-account JSON, OR (recommended) that JSON
-    // base64-encoded — base64 has no newlines/quotes so it can't get corrupted
-    // when pasted into a secret field. Auto-detect: JSON starts with "{".
-    let saText = saRaw.trim();
-    if (!saText.startsWith("{")) {
-      const bin = atob(saText.replace(/\s+/g, ""));
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      saText = new TextDecoder().decode(bytes);
+    let token: string;
+    if (haveOAuth) {
+      // Preferred: mint an access token from the stored user refresh token.
+      token = await getAccessTokenFromRefresh(oauthClientId!, oauthClientSecret!, oauthRefresh!);
+    } else {
+      // Service-account fallback. GSC_SA_JSON may be the raw JSON, OR (recommended)
+      // that JSON base64-encoded — base64 has no newlines/quotes so it can't get
+      // corrupted when pasted into a secret field. Auto-detect: JSON starts with "{".
+      let saText = saRaw!.trim();
+      if (!saText.startsWith("{")) {
+        const bin = atob(saText.replace(/\s+/g, ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        saText = new TextDecoder().decode(bytes);
+      }
+      token = await getAccessToken(JSON.parse(saText));
     }
-    const sa = JSON.parse(saText);
-    const token = await getAccessToken(sa);
     const range = { startDate: ymd(start), endDate: ymd(end) };
 
     const [totalsR, queriesR, pagesR, trendR] = await Promise.all([
