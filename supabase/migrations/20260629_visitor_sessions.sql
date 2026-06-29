@@ -31,7 +31,8 @@ create policy vs_admin_read on public.visitor_sessions for select
 -- Upsert a session: first call inserts; later calls extend duration_sec and count
 -- pages. IP/country backfill only when previously unknown (coalesce keeps the first
 -- non-null value). Bounce = sessions whose page_count stays at 1.
-create or replace function public.fn_track_session(
+drop function if exists public.fn_track_session(text, text, text, text, text, boolean);
+create function public.fn_track_session(
   p_session_key text,
   p_ip          text,
   p_country     text,
