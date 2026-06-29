@@ -55,7 +55,10 @@ begin
     (p_session_key, nullif(p_ip, ''), nullif(p_country, ''), nullif(p_user_agent, ''), 1, 0, now(), now())
   on conflict (session_key) do update set
     page_count   = v.page_count + (case when p_is_new_page then 1 else 0 end),
-    duration_sec = greatest(0, floor(extract(epoch from (now() - v.started_at)))::int),
+    -- Accumulate ACTIVE time only: add the gap since the last ping, but cap each
+    -- gap at 60s so idle / left-open / came-back-later time isn't counted. Total
+    -- capped at 1h. (Heartbeat pings every ~20s while the tab is visible.)
+    duration_sec = least(3600, v.duration_sec + least(60, greatest(0, floor(extract(epoch from (now() - v.last_seen_at)))::int))),
     last_seen_at = now(),
     visitor_ip   = coalesce(v.visitor_ip, nullif(p_ip, '')),
     country      = coalesce(v.country, nullif(p_country, '')),
