@@ -136,7 +136,10 @@ Deno.serve(async (req) => {
       trend: (trendR.rows || []).map((r: any) => ({ date: r.keys?.[0] || "", clicks: r.clicks || 0, impressions: r.impressions || 0 })),
     });
   } catch (e) {
-    console.error("gsc-insights", String((e as any)?.message || e));
-    return json({ configured: true, error: "Couldn't load Search Console data. Check the service account + property access." }, 502);
+    const detail = String((e as any)?.message || e);
+    console.error("gsc-insights", detail);
+    // Admin-only function, so it's safe to surface the real Google error here to
+    // make setup problems (bad key / no property access / wrong site URL) obvious.
+    return json({ configured: true, error: "Couldn't load Search Console data. Check the service account + property access.", detail }, 502);
   }
 });
