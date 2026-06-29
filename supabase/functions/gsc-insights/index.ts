@@ -116,7 +116,17 @@ Deno.serve(async (req) => {
   const start = new Date(); start.setDate(start.getDate() - days);
 
   try {
-    const sa = JSON.parse(saRaw);
+    // GSC_SA_JSON may be the raw service-account JSON, OR (recommended) that JSON
+    // base64-encoded — base64 has no newlines/quotes so it can't get corrupted
+    // when pasted into a secret field. Auto-detect: JSON starts with "{".
+    let saText = saRaw.trim();
+    if (!saText.startsWith("{")) {
+      const bin = atob(saText.replace(/\s+/g, ""));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      saText = new TextDecoder().decode(bytes);
+    }
+    const sa = JSON.parse(saText);
     const token = await getAccessToken(sa);
     const range = { startDate: ymd(start), endDate: ymd(end) };
 
