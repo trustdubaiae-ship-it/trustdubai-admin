@@ -236,6 +236,19 @@ export default function ApplicationsPage() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '')
 
+    // 30-day free trial starting at activation. While the Launch Plan master switch
+    // is ON, a future trial_expires_at gives the company the premium tier free; it
+    // auto-reverts to its real plan when the date passes. Days come from the Launch
+    // Plan config (fallback 30). Harmless if the switch is off (just ignored).
+    const { data: lpCfg } = await supabase
+      .from('platform_settings')
+      .select('launch_plan_days')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const trialDays = Number(lpCfg?.launch_plan_days) || 30
+    const trialExpires = new Date(Date.now() + trialDays * 864e5).toISOString()
+
     // 2. Check if company already exists by owner_email (pending row created at List Biz)
     const { data: existing } = await supabase
       .from('companies')
@@ -252,6 +265,7 @@ export default function ApplicationsPage() {
         location: app.location || '',
         phone: app.phone || '',
         whatsapp: app.whatsapp || app.phone || '',
+        trial_expires_at: trialExpires,   // 30-day free trial from activation
         // carry the partner referral over so the partner gets credited
         ...(app.referred_by_partner_id ? { referred_by_partner_id: app.referred_by_partner_id } : {}),
       }).eq('id', existing.id)
@@ -273,6 +287,7 @@ export default function ApplicationsPage() {
         slug,
         status: 'approved',
         plan: 'free',
+        trial_expires_at: trialExpires,   // 30-day free trial from activation
         is_verified: false,
         created_at: new Date().toISOString(),
         // carry the partner referral over so the partner gets credited
