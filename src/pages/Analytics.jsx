@@ -1,6 +1,7 @@
 // trustdubai-admin/src/pages/Analytics.jsx
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { supabase } from '../supabase'
+import GoogleSearchPanel from '../components/GoogleSearchPanel'
 
 /* ============================================================================
    Quvera — Platform Analytics
@@ -785,6 +786,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
           </button>
         </div>
       </div>
+
+      {!isFull && <GoogleSearchPanel C={C} F={F} mobile={mobile} />}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '80px 0', color: C.t2 }}>
