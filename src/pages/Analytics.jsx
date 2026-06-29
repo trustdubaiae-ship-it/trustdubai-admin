@@ -47,6 +47,10 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
   const [recommendation, setRecommendation] = useState('')
   const [realtime, setRealtime] = useState(0)
   const [supply, setSupply] = useState({ total: 0, verified: 0, claimed: 0, members: 0, listed: 0, plans: { free: 0, silver: 0, gold: 0, platinum: 0 } })
+  // Google Search Console totals for the current range — fed into the combined
+  // "Total Reach" KPI (site profile views + Google search reach). Best-effort:
+  // if GSC isn't connected yet this stays zero and Reach falls back to site only.
+  const [gsc, setGsc] = useState({ clicks: 0, impressions: 0, configured: false })
 
   const mobile = vw < 760
   const tablet = vw >= 760 && vw < 1200
@@ -314,6 +318,16 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
         plans: { free: pFree.count || 0, silver: pSilver.count || 0, gold: pGold.count || 0, platinum: pPlat.count || 0 },
       })
 
+      // Google Search Console reach (same range) — best-effort, never blocks the page.
+      try {
+        const { data: g, error: gErr } = await supabase.functions.invoke('gsc-insights', { body: { days: r } })
+        if (!gErr && g?.configured && g?.totals) {
+          setGsc({ clicks: g.totals.clicks || 0, impressions: g.totals.impressions || 0, configured: true })
+        } else {
+          setGsc({ clicks: 0, impressions: 0, configured: false })
+        }
+      } catch { setGsc({ clicks: 0, impressions: 0, configured: false }) }
+
       setLastSync(new Date())
     } catch (e) { console.error('Analytics load error:', e) }
     finally { setLoading(false); setRefreshing(false) }
@@ -434,6 +448,8 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     rows.push(['Quvera Analytics Export', new Date().toLocaleString('en-AE')])
     rows.push([])
     rows.push(['KPIs'])
+    rows.push(['Total Reach (site + Google)', kpi.views + gsc.impressions])
+    rows.push(['  · Google impressions', gsc.impressions]); rows.push(['  · Google clicks', gsc.clicks])
     rows.push(['Profile Views', kpi.views]); rows.push(['Unique Visitors', kpi.unique])
     rows.push(['Lead Form Views', kpi.leadViews]); rows.push(['Sponsor Impressions', kpi.sponsorImp])
     rows.push(['Returning %', kpi.returning]); rows.push(['Growth Score', kpi.growth])
@@ -460,13 +476,17 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
     <>
       <div className="an-grid">
 
-        {/* KPI ROW — 6 × span2 */}
-        <KpiCard className="s2" label="Profile Views" value={fmt(kpi.views)} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard className="s2" label="Unique Visitors" value={fmt(kpi.unique)} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} sub="by IP" />
-        <KpiCard className="s2" label="Lead Form Views" value={fmt(kpi.leadViews)} chg={kpi.leadChg} color={C.indigo} icon="ti-clipboard-list" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard className="s2" label="Sponsor Impr." value={fmt(kpi.sponsorImp)} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
-        <KpiCard className="s2" label="Returning" value={kpi.returning} suffix="%" chg={kpi.returningChg} color={C.green} icon="ti-refresh" sub="repeat visitors" />
-        <KpiCard className="s2" label="Growth Score" value={kpi.growth} suffix="/100" chg={0} color={C.pink} icon="ti-rocket" sub={kpi.growth >= 70 ? 'Excellent' : kpi.growth >= 40 ? 'Healthy' : 'Building'} />
+        {/* KPI ROW — 7 cards in a responsive sub-grid (Total Reach = site + Google) */}
+        <div className="an-kpis">
+          <KpiCard label="Total Reach" value={fmt(kpi.views + gsc.impressions)} chg={kpi.viewsChg} color={C.green} icon="ti-broadcast"
+            sub={gsc.configured ? `${fmt(kpi.views)} site + ${fmt(gsc.impressions)} Google` : 'site only · Google pending'} />
+          <KpiCard label="Profile Views" value={fmt(kpi.views)} chg={kpi.viewsChg} color={C.cyan} icon="ti-eye" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+          <KpiCard label="Unique Visitors" value={fmt(kpi.unique)} chg={kpi.uniqueChg} color={C.purple} icon="ti-users" sparkData={trend.map(t => t.v)} sub="by IP" />
+          <KpiCard label="Lead Form Views" value={fmt(kpi.leadViews)} chg={kpi.leadChg} color={C.indigo} icon="ti-clipboard-list" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+          <KpiCard label="Sponsor Impr." value={fmt(kpi.sponsorImp)} chg={kpi.sponsorChg} color={C.amber} icon="ti-speakerphone" sparkData={trend.map(t => t.v)} sub={`vs prev ${range}d`} />
+          <KpiCard label="Returning" value={kpi.returning} suffix="%" chg={kpi.returningChg} color={C.green} icon="ti-refresh" sub="repeat visitors" />
+          <KpiCard label="Growth Score" value={kpi.growth} suffix="/100" chg={0} color={C.pink} icon="ti-rocket" sub={kpi.growth >= 70 ? 'Excellent' : kpi.growth >= 40 ? 'Healthy' : 'Building'} />
+        </div>
 
         {/* PRIMARY ROW — Trend (s5) · Platform Supply (s4) · AI Insights (s3) */}
         <Panel glow className="s5">
@@ -741,8 +761,9 @@ export default function Analytics({ setPage, theme = 'dark', adminData }) {
       <style>{`@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}} .an-scroll::-webkit-scrollbar{width:6px}.an-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:99px}
         .an-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch;}
         .an-grid>.s2{grid-column:span 2}.an-grid>.s3{grid-column:span 3}.an-grid>.s4{grid-column:span 4}.an-grid>.s5{grid-column:span 5}.an-grid>.s6{grid-column:span 6}
-        @media(max-width:1200px){.an-grid{grid-template-columns:repeat(6,1fr)}.an-grid>*{grid-column:span 3 !important}}
-        @media(max-width:760px){.an-grid{grid-template-columns:1fr;gap:12px}.an-grid>*{grid-column:span 1 !important}}`}</style>
+        .an-kpis{grid-column:1 / -1;display:grid;grid-template-columns:repeat(7,1fr);gap:14px;align-items:stretch;}
+        @media(max-width:1200px){.an-grid{grid-template-columns:repeat(6,1fr)}.an-grid>*{grid-column:span 3 !important}.an-grid>.an-kpis{grid-template-columns:repeat(3,1fr);grid-column:1 / -1 !important}}
+        @media(max-width:760px){.an-grid{grid-template-columns:1fr;gap:12px}.an-grid>*{grid-column:span 1 !important}.an-grid>.an-kpis{grid-template-columns:repeat(2,1fr);gap:12px}}`}</style>
 
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap', flexShrink: 0 }}>
