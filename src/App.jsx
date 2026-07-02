@@ -256,7 +256,7 @@ export default function App() {
         {page === 'doc_verification'  && <DocumentVerification theme={theme} adminData={adminData} />}
         {page === 'applications'      && <Applications />}
         {page === 'verification'      && <VerificationQueue theme={theme} adminData={adminData} />}
-        {page === 'claim_requests'    && <ClaimRequests />}
+        {page === 'claim_requests'    && <ClaimRequests theme={theme} adminData={adminData} />}
         {page === 'duplicate_claims'  && <DuplicateClaims />}
         {page === 'plan_approvals'    && (isSales || isAccounts || isSuperAdmin) && <PlanApprovals />}
         {page === 'accounts'          && (isAccounts || isSuperAdmin) && <Accounts />}

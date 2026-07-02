@@ -36,7 +36,15 @@ function Modal({ title, onClose, children, wide }) {
   )
 }
 
-export default function ClaimRequests() {
+// Required before an admin can approve a real company claim. Admin CALLS the
+// registered number, asks the verification questions, then ticks each box.
+const VCHECK_ITEMS = [
+  { key: 'called',   label: 'Called the registered number & reached the business' },
+  { key: 'answered', label: 'Caller answered the verification questions correctly' },
+  { key: 'tl_match', label: 'Trade licence matches the company (name + number)' },
+]
+
+export default function ClaimRequests({ theme, adminData } = {}) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   const [, forceUpdate] = useState(0)
   const [rows, setRows] = useState([])
@@ -46,6 +54,25 @@ export default function ClaimRequests() {
   const [search, setSearch] = useState('')
   const [detail, setDetail] = useState(null)
   const [busy, setBusy] = useState(false)
+  // per-open verification state
+  const [vchecks, setVchecks] = useState({})
+  const [vnotes, setVnotes] = useState('')
+  const [companyRef, setCompanyRef] = useState(null)   // linked company's on-file data (the "answers")
+
+  // Open a request: load its saved verification + the linked company's real details to verify against
+  async function openDetail(r) {
+    setDetail(r)
+    setVchecks(r.verify_checklist || {})
+    setVnotes(r.verify_notes || '')
+    setCompanyRef(null)
+    if (r.company_id) {
+      const { data } = await supabase
+        .from('companies')
+        .select('name, phone, location, category, trade_license_number, owner_email, claimed')
+        .eq('id', r.company_id).maybeSingle()
+      setCompanyRef(data || null)
+    }
+  }
 
   useEffect(() => {
     fetchAll()
@@ -81,10 +108,24 @@ export default function ClaimRequests() {
   }
 
   async function approve(req) {
+    // Gate: a real company claim can't be approved until the admin has called &
+    // verified. (Support requests / no linked company skip the checklist.)
+    const needsVerify = !!req.company_id
+    if (needsVerify && !VCHECK_ITEMS.every(i => vchecks[i.key])) {
+      alert('Please complete all verification steps first — call the registered number and tick each check.')
+      return
+    }
     setBusy(true)
-    // Promote the listed company to a claimed, owner-linked, license-verified profile
-    // that can RECEIVE leads (accepting_leads) and is no longer "claim bait".
     if (req.company_id) {
+      // Anti-hijack: re-check the company isn't ALREADY claimed by someone else.
+      const { data: cnow } = await supabase.from('companies').select('claimed, owner_email').eq('id', req.company_id).maybeSingle()
+      if (cnow?.claimed) {
+        setBusy(false)
+        alert('⚠ This company is already claimed' + (cnow.owner_email ? ' by ' + cnow.owner_email : '') + '.\nCannot approve a second claim (possible hijack). Reject it if it is not legitimate.')
+        return
+      }
+      // Promote the listed company to a claimed, owner-linked, license-verified profile
+      // that can RECEIVE leads (accepting_leads) and is no longer "claim bait".
       await supabase.from('companies').update({
         claimed: true,
         owner_email: (req.contact_email || '').toLowerCase(),
@@ -92,7 +133,13 @@ export default function ClaimRequests() {
         accepting_leads: true,
       }).eq('id', req.company_id)
     }
-    await supabase.from('claim_requests').update({ status: 'approved' }).eq('id', req.id)
+    await supabase.from('claim_requests').update({
+      status: 'approved',
+      verify_checklist: needsVerify ? vchecks : null,
+      verify_notes: vnotes || null,
+      verified_by_name: adminData?.full_name || 'Admin',
+      verified_at: new Date().toISOString(),
+    }).eq('id', req.id)
     setBusy(false); setDetail(null); fetchAll()
     alert(req.company_id
       ? '✅ Approved. Company is now Claimed, License-Verified & receiving leads.'
@@ -242,7 +289,7 @@ export default function ClaimRequests() {
             const ss = statusStyle(r.status, isDark)
             const kb = kindBadge(r.kind)
             return (
-              <div key={r.id} onClick={() => setDetail(r)}
+              <div key={r.id} onClick={() => openDetail(r)}
                 style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}
                 onMouseEnter={e => { e.currentTarget.style.background = bgRow }}
                 onMouseLeave={e => { e.currentTarget.style.background = cardBg }}
@@ -288,6 +335,15 @@ export default function ClaimRequests() {
           </div>
         ) : null
         const status = detail.status || 'pending'
+        const needsVerify = status === 'pending' && !!detail.company_id
+        const allChecked = VCHECK_ITEMS.every(i => vchecks[i.key])
+        const callNumber = companyRef?.phone || detail.contact_phone || ''
+        const QA = [
+          ['Trade licence number', companyRef?.trade_license_number || detail.tl_number],
+          ['Registered area / location', companyRef?.location],
+          ['Business category', companyRef?.category],
+          ['Owner email on file', companyRef?.owner_email],
+        ].filter(x => x[1])
         return (
           <Modal title={detail.company_name || 'Request'} onClose={() => setDetail(null)} wide>
             {/* header strip */}
@@ -318,6 +374,9 @@ export default function ClaimRequests() {
               {row('TL expiry', detail.tl_expiry ? fmtDate(detail.tl_expiry) : null)}
               {row('Linked company', detail.company_id ? detail.company_id : '⚠️ No linked company (manual handling)')}
               {row('Submitted', fmtDateTime(detail.created_at))}
+              {row('Verified by', detail.verified_by_name)}
+              {row('Verified at', detail.verified_at ? fmtDateTime(detail.verified_at) : null)}
+              {row('Verify notes', detail.verify_notes)}
               {detail.message && (
                 <div style={{ padding: '10px 0', borderBottom: '1px solid ' + bc }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: ts, display: 'block', marginBottom: 4 }}>Message</span>
@@ -333,11 +392,62 @@ export default function ClaimRequests() {
               </button>
             )}
 
+            {/* verification gate — admin must call & verify before approving a real claim */}
+            {needsVerify && (
+              <div style={{ background: isDk ? 'rgba(245,158,11,0.08)' : '#fffbeb', border: '1px solid ' + (isDk ? 'rgba(245,158,11,0.3)' : '#fde68a'), borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t, marginBottom: 4 }}>
+                  <i className="ti ti-phone-check" style={{ color: '#f59e0b' }} /> Verify ownership before approving
+                </div>
+                <p style={{ fontSize: 12, color: ts, marginBottom: 12, lineHeight: 1.6 }}>
+                  Call the company's <strong>registered number</strong> and confirm the answers below match. Approve is locked until all steps are checked.
+                </p>
+
+                {/* number to call */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: isDk ? 'rgba(255,255,255,0.04)' : '#fff', border: '1px solid ' + bc, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                  <i className="ti ti-phone" style={{ fontSize: 18, color: '#1e8e3e' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: ts }}>Registered number — call this</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: t, letterSpacing: 0.3 }}>{callNumber || '⚠️ no number on file'}</div>
+                  </div>
+                  {callNumber && <a href={'tel:' + callNumber.replace(/\s/g, '')} style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#1e8e3e', padding: '7px 12px', borderRadius: 8, textDecoration: 'none' }}>Call</a>}
+                </div>
+
+                {/* verification questions with on-file answers */}
+                {QA.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: ts, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Ask the caller — must match on-file:</div>
+                    {QA.map(([q, a]) => (
+                      <div key={q} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: '1px dashed ' + bc, fontSize: 12.5 }}>
+                        <span style={{ color: ts }}>{q}?</span>
+                        <span style={{ color: t, fontWeight: 600, textAlign: 'right', wordBreak: 'break-word' }}>{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* checklist */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  {VCHECK_ITEMS.map(item => (
+                    <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: t, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!vchecks[item.key]} onChange={e => setVchecks(v => ({ ...v, [item.key]: e.target.checked }))} style={{ marginTop: 2, width: 15, height: 15, cursor: 'pointer', accentColor: '#1e8e3e' }} />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* notes */}
+                <textarea value={vnotes} onChange={e => setVnotes(e.target.value)} placeholder="Notes — who you spoke to, anything unusual…"
+                  style={{ width: '100%', boxSizing: 'border-box', minHeight: 52, resize: 'vertical', padding: '8px 10px', fontSize: 12.5, border: '1px solid ' + bc, borderRadius: 8, background: isDk ? 'rgba(255,255,255,0.04)' : '#fff', color: t, outline: 'none', fontFamily: 'inherit' }} />
+
+                {!allChecked && <p style={{ fontSize: 11, color: '#ef4444', marginTop: 8 }}>⚠ Complete all checks above to enable Approve.</p>}
+              </div>
+            )}
+
             {/* actions */}
             <div style={{ display: 'flex', gap: 8 }}>
               {status === 'pending' && (
                 <>
-                  <button onClick={() => approve(detail)} disabled={busy} style={{ flex: 1, padding: 11, background: busy ? '#94a3b8' : '#1e8e3e', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer' }}>
+                  <button onClick={() => approve(detail)} disabled={busy || (needsVerify && !allChecked)} style={{ flex: 1, padding: 11, background: (busy || (needsVerify && !allChecked)) ? '#94a3b8' : '#1e8e3e', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (busy || (needsVerify && !allChecked)) ? 'not-allowed' : 'pointer' }}>
                     {busy ? 'Working…' : '✓ Approve Claim'}
                   </button>
                   <button onClick={() => reject(detail)} disabled={busy} style={{ flex: 1, padding: 11, background: isDk ? 'rgba(239,68,68,0.12)' : '#fce8e6', color: '#ef4444', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer' }}>
