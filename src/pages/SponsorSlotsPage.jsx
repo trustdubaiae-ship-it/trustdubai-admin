@@ -452,7 +452,7 @@ export default function SponsorSlotsPage() {
       {/* Approve Modal */}
       {showApprove && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }}>
-          <div style={{ background:'#161b22', border:'0.5px solid rgba(255,255,255,0.1)', borderRadius:14, padding:24, width:380 }}>
+          <div style={{ background:'#161b22', border:'0.5px solid rgba(255,255,255,0.1)', borderRadius:14, padding:24, width:380, maxWidth:'calc(100vw - 28px)', boxSizing:'border-box' }}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>Approve Sponsor Slot</div>
             <div style={{ fontSize:11, color:C.text2, marginBottom:16 }}>{showApprove.companies?.name} · {DURATION_LABELS[showApprove.duration_months]}</div>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>

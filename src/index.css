@@ -82,3 +82,23 @@ button, input, select, textarea {
 @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+/* ============================================================
+   Mobile responsiveness — collapse fixed inline KPI/stat grids
+   so 4–6 column stat rows don't squish to unreadable widths.
+   (Pages use inline grid-template-columns; these override on phones.)
+   ============================================================ */
+@media (max-width: 767px) {
+  div[style*="repeat(3,1fr)"], div[style*="repeat(3, 1fr)"],
+  div[style*="repeat(4,1fr)"], div[style*="repeat(4, 1fr)"],
+  div[style*="repeat(5,1fr)"], div[style*="repeat(5, 1fr)"],
+  div[style*="repeat(6,1fr)"], div[style*="repeat(6, 1fr)"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+@media (min-width: 768px) and (max-width: 1024px) {
+  div[style*="repeat(5,1fr)"], div[style*="repeat(5, 1fr)"],
+  div[style*="repeat(6,1fr)"], div[style*="repeat(6, 1fr)"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}

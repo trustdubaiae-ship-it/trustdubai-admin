@@ -333,7 +333,7 @@ export default function PlanApprovals() {
       {/* Reject Modal */}
       {rejectModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 440 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 440, maxWidth: 'calc(100vw - 28px)', boxSizing: 'border-box' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Reject Plan Approval</h3>
             <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
               placeholder="Enter rejection reason..."

@@ -139,7 +139,7 @@ export default function Plans() {
       {/* Edit Plan Modal */}
       {editPlan && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 420 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 420, maxWidth: 'calc(100vw - 28px)', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600 }}>Edit — {editPlan.name} Plan</h2>
               <button onClick={() => setEditPlan(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)' }}>×</button>
