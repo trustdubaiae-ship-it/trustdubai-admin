@@ -328,11 +328,11 @@ export default function Distribution({ theme }) {
       {/* Recent distributions */}
       <div style={{ marginTop:20 }}>
         <div style={{ fontSize:11, color:muted, textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8, fontWeight:700 }}>Recent Distributions</div>
-        <div style={{ background:card, border:`1px solid ${border}`, borderRadius:12, overflow:'hidden' }}>
+        <div style={{ background:card, border:`1px solid ${border}`, borderRadius:12, overflowX:'auto' }}>
           {recentDist.length === 0 ? (
             <div style={{ padding:24, textAlign:'center', color:muted, fontSize:13 }}>No leads distributed yet.</div>
           ) : (
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <table style={{ width:'100%', minWidth:720, borderCollapse:'collapse', fontSize:13 }}>
               <thead>
                 <tr style={{ background:bg }}>
                   <th style={{ textAlign:'left', padding:'10px 14px', color:muted, fontWeight:600, fontSize:11 }}>Lead</th>

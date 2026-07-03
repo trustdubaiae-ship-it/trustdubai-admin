@@ -579,7 +579,8 @@ function AppCard({
               </div>
 
               {activeTab === 'checklist' && (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: bgRow }}>
                       {['Field', 'Submitted Value', 'Status', 'Action', 'Notes'].map(h => (
@@ -617,6 +618,7 @@ function AppCard({
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
 
               {activeTab === 'social' && (

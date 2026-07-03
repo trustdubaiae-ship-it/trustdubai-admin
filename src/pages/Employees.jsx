@@ -10,8 +10,8 @@ export default function Employees(){
   return(<div>
     <div style={{marginBottom:24}}><h1 style={{fontSize:22,fontWeight:600}}>Employees</h1><p style={{fontSize:13,color:'var(--text2)',marginTop:4}}>Manage employee profiles</p></div>
     {loading?<p style={{textAlign:'center',padding:40,color:'var(--text3)'}}>Loading...</p>:
-    <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-      <table style={{width:'100%',borderCollapse:'collapse'}}>
+    <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:12,overflowX:'auto'}}>
+      <table style={{width:'100%',minWidth:680,borderCollapse:'collapse'}}>
         <thead><tr style={{background:'var(--bg)'}}>
           {['Employee','Designation','Company','Rating','Status','Actions'].map(h=>(
             <th key={h} style={{padding:'12px 16px',textAlign:'left',fontSize:12,fontWeight:600,color:'var(--text2)',borderBottom:'1px solid var(--border)'}}>{h}</th>

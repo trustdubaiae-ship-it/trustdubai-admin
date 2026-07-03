@@ -477,8 +477,8 @@ export default function Companies({ initialPlanFilter }) {
         <>
           {/* LIST VIEW */}
           {viewMode === 'list' && (
-            <div style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div style={{ background: cardBg, border: '1px solid ' + borderCol, borderRadius: 12, overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: bgRow }}>
                     {['Company', 'Category', 'Source', 'Plan', 'Performance', 'Expiry', 'Status', 'Referred by', 'Actions'].map(h => (
