@@ -54,6 +54,9 @@ export default function ClaimRequests({ theme, adminData } = {}) {
   const [search, setSearch] = useState('')
   const [detail, setDetail] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
   // per-open verification state
   const [vchecks, setVchecks] = useState({})
   const [vnotes, setVnotes] = useState('')
@@ -157,6 +160,20 @@ export default function ClaimRequests({ theme, adminData } = {}) {
     setBusy(true)
     await supabase.from('claim_requests').update({ status: 'pending' }).eq('id', req.id)
     setBusy(false); setDetail(null); fetchAll()
+  }
+
+  // Admin-only: correct the login email (e.g. after calling a claimant who
+  // entered a non-Gmail address). This becomes owner_email on approval.
+  async function saveEmail(req) {
+    const em = (newEmail || '').trim().toLowerCase()
+    if (!/\S+@\S+\.\S+/.test(em)) { alert('Enter a valid email'); return }
+    setSavingEmail(true)
+    const { error } = await supabase.from('claim_requests').update({ contact_email: em }).eq('id', req.id)
+    setSavingEmail(false)
+    if (error) { alert('Could not update email: ' + error.message); return }
+    setDetail(d => ({ ...d, contact_email: em }))
+    setRows(rs => rs.map(r => r.id === req.id ? { ...r, contact_email: em } : r))
+    setEditingEmail(false)
   }
 
   /* counts */
@@ -368,7 +385,29 @@ export default function ClaimRequests({ theme, adminData } = {}) {
             {/* details */}
             <div style={{ marginBottom: 16 }}>
               {row('Contact name', detail.contact_name)}
-              {row('Email', detail.contact_email)}
+              {/* Login email — admin can correct it; flagged if not a Google address */}
+              <div style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid ' + bc, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: ts, minWidth: 130 }}>Login email</span>
+                <div style={{ flex: 1, minWidth: 190 }}>
+                  {!editingEmail ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13, color: t, wordBreak: 'break-word' }}>{detail.contact_email || '—'}</span>
+                      <button onClick={() => { setNewEmail(detail.contact_email || ''); setEditingEmail(true) }} style={{ fontSize: 11.5, fontWeight: 600, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><i className="ti ti-pencil" style={{ fontSize: 12 }} /> Edit</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="owner@gmail.com" autoFocus style={{ flex: 1, minWidth: 160, padding: '7px 10px', border: '1px solid ' + bc, borderRadius: 8, fontSize: 13, background: isDk ? '#0f1419' : '#fff', color: t, outline: 'none' }} />
+                      <button onClick={() => saveEmail(detail)} disabled={savingEmail} style={{ padding: '7px 12px', border: 'none', borderRadius: 8, background: '#1e8e3e', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: savingEmail ? 'wait' : 'pointer' }}>{savingEmail ? '…' : 'Save'}</button>
+                      <button onClick={() => setEditingEmail(false)} style={{ padding: '7px 12px', border: '1px solid ' + bc, borderRadius: 8, background: 'transparent', color: ts, fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  )}
+                  {detail.contact_email && !/@gmail\.com$/i.test(detail.contact_email.trim()) && (
+                    <div style={{ fontSize: 11, color: '#b45309', marginTop: 5, lineHeight: 1.5 }}>
+                      <i className="ti ti-alert-triangle" style={{ fontSize: 12, verticalAlign: '-1px' }} /> Not a @gmail.com address. If this isn't a Google account, the owner can't sign in — call them and update it to their Gmail.
+                    </div>
+                  )}
+                </div>
+              </div>
               {row('Phone', detail.contact_phone)}
               {row('Trade licence no.', detail.tl_number)}
               {row('TL expiry', detail.tl_expiry ? fmtDate(detail.tl_expiry) : null)}
