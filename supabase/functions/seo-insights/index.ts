@@ -130,7 +130,7 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 3000,
+        max_tokens: 6000,
         system,
         messages: [{ role: "user", content: "Analyse this data and return the JSON report:\n" + JSON.stringify(dataForAI) }],
       }),
@@ -151,7 +151,7 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       const m = text.match(/\{[\s\S]*\}/);
       if (m) { try { report = JSON.parse(m[0]); } catch { /* give up */ } }
     }
-    if (!report) return json({ pagespeed: pageResults, error: "AI returned an unparseable report.", raw: text.slice(0, 400) }, 502);
+    if (!report) return json({ pagespeed: pageResults, error: "AI returned an unparseable report.", detail: "Model output starts: " + text.slice(0, 300) }, 502);
     return json({ ok: true, pagespeed: pageResults, report, usedPagespeedKey: !!psKey });
   } catch (e) {
     return json({ pagespeed: pageResults, error: String((e && (e as any).message) || e) }, 500);
