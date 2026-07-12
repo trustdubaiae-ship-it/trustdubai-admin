@@ -47,7 +47,14 @@ export default function SeoInsights({ theme = 'dark' }) {
 
       setStage('Running PageSpeed + deep research (this can take ~30s)…')
       const { data: s, error: sErr } = await supabase.functions.invoke('seo-insights', { body: { gsc: g, urls } })
-      if (sErr) throw new Error(sErr.message || 'Analysis failed')
+      if (sErr) {
+        // supabase-js puts the function's JSON body on error.context (a Response);
+        // read it so the REAL reason (bad model, timeout, etc.) is shown, not the
+        // generic "non-2xx status code".
+        let detail = sErr.message || 'Analysis failed'
+        try { const b = await sErr.context.json(); if (b?.pagespeed) setPs(b.pagespeed); detail = b?.detail || b?.error || detail } catch { /* body not JSON */ }
+        throw new Error(detail)
+      }
       if (s?.pagespeed) setPs(s.pagespeed)
       if (s?.error && !s.report) throw new Error(s.detail || s.error)
       setReport(s?.report || null)
