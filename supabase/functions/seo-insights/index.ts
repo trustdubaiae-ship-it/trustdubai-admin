@@ -141,7 +141,9 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       return json({ pagespeed: pageResults, error: "AI request failed", detail }, 502);
     }
     const data = await aiRes.json();
-    let text = (data?.content?.[0]?.text || "").trim();
+    // Collect ALL text blocks — the model may return a non-text block (e.g. a
+    // thinking block) first, so content[0] is not guaranteed to be the text.
+    let text = (Array.isArray(data?.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b?.text || "").join("") : "").trim();
     // strip accidental code fences, then parse
     text = text.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
     let report: any = null;
@@ -151,7 +153,7 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       const m = text.match(/\{[\s\S]*\}/);
       if (m) { try { report = JSON.parse(m[0]); } catch { /* give up */ } }
     }
-    if (!report) return json({ pagespeed: pageResults, error: "AI returned an unparseable report.", detail: "Model output starts: " + text.slice(0, 300) }, 502);
+    if (!report) return json({ pagespeed: pageResults, error: text ? "AI returned an unparseable report." : "AI returned no text.", detail: text ? ("Model output starts: " + text.slice(0, 300)) : ("stop=" + (data?.stop_reason || "?") + " blocks=" + ((data?.content || []).map((b: any) => b?.type).join(",") || "none")) }, 502);
     return json({ ok: true, pagespeed: pageResults, report, usedPagespeedKey: !!psKey });
   } catch (e) {
     return json({ pagespeed: pageResults, error: String((e && (e as any).message) || e) }, 500);
