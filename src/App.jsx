@@ -39,6 +39,7 @@ import SuperAdminSettings from './pages/SuperAdminSettings'
 import BadgeManager from './pages/BadgeManager'
 import VerificationQueue from './pages/VerificationQueue'
 import Analytics from './pages/Analytics'
+import SeoInsights from './pages/SeoInsights'
 import ClaimRequests from './pages/ClaimRequests'
 import DuplicateClaims from './pages/DuplicateClaims'
 
@@ -51,7 +52,7 @@ const VALID_PAGES = new Set([
   'doc_verification','applications','verification','plan_approvals','accounts','users',
   'reports','disputes','ai_moderation','trust_score','business_insights','system_health',
   'notifications','sponsor_slots','settings','badges_manager','claim_requests','duplicate_claims',
-  'ai_manager','partners',
+  'ai_manager','partners','seo_insights',
 ])
 
 // Read current page from the URL hash (e.g. #companies). Falls back to dashboard.
@@ -238,6 +239,7 @@ export default function App() {
         {page === 'dashboard'         && <Dashboard setPage={goPage} setPlanFilter={setPlanFilter} theme={theme} adminData={adminData} />}
         {page === 'revenue_engine'    && <RevenueEngine setPage={goPage} theme={theme} adminData={adminData} />}
         {page === 'analytics'         && <Analytics setPage={goPage} theme={theme} adminData={adminData} />}
+        {page === 'seo_insights'      && isSuperAdmin && <SeoInsights setPage={goPage} theme={theme} adminData={adminData} />}
         {page === 'inbox'             && <AdminInbox theme={theme} adminData={adminData} />}
         {page === 'companies'         && <Companies canAccess={canAccess} initialPlanFilter={planFilter} />}
         {page === 'reviews'           && <Reviews canAccess={canAccess} />}
