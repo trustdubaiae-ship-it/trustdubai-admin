@@ -22,13 +22,24 @@ const json = (o: unknown, s = 200) =>
 
 // ---- PageSpeed Insights for one URL (mobile) → score + failing audits ----
 async function pagespeed(url: string, key?: string) {
-  const params = new URLSearchParams({ url, strategy: "mobile" });
-  params.append("category", "PERFORMANCE");
-  params.append("category", "SEO");
-  if (key) params.append("key", key);
-  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || `PageSpeed ${res.status}`);
+  const call = async (useKey: boolean) => {
+    const params = new URLSearchParams({ url, strategy: "mobile" });
+    params.append("category", "PERFORMANCE");
+    params.append("category", "SEO");
+    if (useKey && key) params.append("key", key);
+    const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d?.error?.message || `PageSpeed ${res.status}`);
+    return d;
+  };
+  let data: any;
+  try { data = await call(true); }
+  catch (e) {
+    // An invalid / restricted PAGESPEED_API_KEY → fall back to a keyless call
+    // (Google allows PageSpeed without a key at low volume) so results still load.
+    if (key && /API key|key not valid|PERMISSION|forbidden|invalid/i.test(String((e as any)?.message || ""))) data = await call(false);
+    else throw e;
+  }
   const lh = data.lighthouseResult || {};
   const cats = lh.categories || {};
   const audits = lh.audits || {};
@@ -105,24 +116,47 @@ Produce a PRIORITISED, ACTIONABLE SEO report. Focus on:
 - Pages/queries with ranking potential → content or on-page suggestions.
 - Technical / speed issues from PageSpeed (only if clearly worth fixing).
 
-Return ONLY valid JSON (no markdown, no code fences) matching EXACTLY this shape:
-{
-  "summary": "2-4 sentence plain-English overview of where SEO stands and the biggest wins.",
-  "issues": [
-    {
-      "severity": "high" | "medium" | "low",
-      "area": "keywords" | "meta" | "content" | "technical" | "speed",
-      "title": "short issue title",
-      "problem": "what's wrong / the opportunity, referencing the real data",
-      "impact": "expected benefit if fixed",
-      "fix": "a READY-TO-USE fix. For meta: give the exact <title> and meta description text. For keywords: the exact keywords/phrases to target and where. For content: concrete copy or sections to add. Keep it copy-paste ready."
-    }
-  ],
-  "opportunities": [
-    { "keyword": "the query", "position": 8.3, "impressions": 1200, "action": "one concrete step to push it to page 1" }
-  ]
-}
-Give 5-9 issues (most impactful first) and up to 8 opportunities from the striking-distance queries. Be specific to the real data — no generic advice.`;
+Every "fix" must be copy-paste ready — for meta give the exact <title> and meta description text; for keywords the exact phrases to target and where; for content concrete copy to add. Give 5-8 issues (most impactful first) and up to 8 opportunities from the striking-distance queries. Be specific to the real data — no generic advice. Return the report by calling the seo_report tool.`;
+
+  const tool = {
+    name: "seo_report",
+    description: "Return the prioritised SEO report for quvera.ae.",
+    input_schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "2-4 sentence overview of where SEO stands and the biggest wins." },
+        issues: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              severity: { type: "string", enum: ["high", "medium", "low"] },
+              area: { type: "string", enum: ["keywords", "meta", "content", "technical", "speed"] },
+              title: { type: "string" },
+              problem: { type: "string" },
+              impact: { type: "string" },
+              fix: { type: "string", description: "copy-paste-ready fix (exact meta text / keywords / content)" },
+            },
+            required: ["severity", "title", "fix"],
+          },
+        },
+        opportunities: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              keyword: { type: "string" },
+              position: { type: "number" },
+              impressions: { type: "number" },
+              action: { type: "string" },
+            },
+            required: ["keyword", "action"],
+          },
+        },
+      },
+      required: ["summary", "issues"],
+    },
+  };
 
   try {
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -130,9 +164,11 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-5",
-        max_tokens: 6000,
+        max_tokens: 8000,
         system,
-        messages: [{ role: "user", content: "Analyse this data and return the JSON report:\n" + JSON.stringify(dataForAI) }],
+        tools: [tool],
+        tool_choice: { type: "tool", name: "seo_report" },
+        messages: [{ role: "user", content: "Analyse this data and produce the report:\n" + JSON.stringify(dataForAI) }],
       }),
     });
     if (!aiRes.ok) {
@@ -141,19 +177,11 @@ Give 5-9 issues (most impactful first) and up to 8 opportunities from the striki
       return json({ pagespeed: pageResults, error: "AI request failed", detail }, 502);
     }
     const data = await aiRes.json();
-    // Collect ALL text blocks — the model may return a non-text block (e.g. a
-    // thinking block) first, so content[0] is not guaranteed to be the text.
-    let text = (Array.isArray(data?.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b?.text || "").join("") : "").trim();
-    // strip accidental code fences, then parse
-    text = text.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
-    let report: any = null;
-    try { report = JSON.parse(text); }
-    catch {
-      // last resort: grab the outermost {...}
-      const m = text.match(/\{[\s\S]*\}/);
-      if (m) { try { report = JSON.parse(m[0]); } catch { /* give up */ } }
-    }
-    if (!report) return json({ pagespeed: pageResults, error: text ? "AI returned an unparseable report." : "AI returned no text.", detail: text ? ("Model output starts: " + text.slice(0, 300)) : ("stop=" + (data?.stop_reason || "?") + " blocks=" + ((data?.content || []).map((b: any) => b?.type).join(",") || "none")) }, 502);
+    // tool_choice forces a tool_use block whose `input` the API validates against
+    // the schema — guaranteed-valid JSON, no text parsing needed.
+    const toolUse = (Array.isArray(data?.content) ? data.content : []).find((b: any) => b?.type === "tool_use");
+    const report = toolUse?.input || null;
+    if (!report) return json({ pagespeed: pageResults, error: "AI returned no report.", detail: "stop=" + (data?.stop_reason || "?") + " blocks=" + ((data?.content || []).map((b: any) => b?.type).join(",") || "none") }, 502);
     return json({ ok: true, pagespeed: pageResults, report, usedPagespeedKey: !!psKey });
   } catch (e) {
     return json({ pagespeed: pageResults, error: String((e && (e as any).message) || e) }, 500);
