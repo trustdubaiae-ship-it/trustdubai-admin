@@ -35,9 +35,10 @@ async function pagespeed(url: string, key?: string) {
   let data: any;
   try { data = await call(true); }
   catch (e) {
-    // An invalid / restricted PAGESPEED_API_KEY → fall back to a keyless call
-    // (Google allows PageSpeed without a key at low volume) so results still load.
-    if (key && /API key|key not valid|PERMISSION|forbidden|invalid/i.test(String((e as any)?.message || ""))) data = await call(false);
+    // An invalid / restricted PAGESPEED_API_KEY, or one whose project has blown
+    // its daily quota → fall back to a keyless call (Google allows PageSpeed
+    // without a key at low volume) so results still load.
+    if (key && /API key|key not valid|PERMISSION|forbidden|invalid|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(String((e as any)?.message || ""))) data = await call(false);
     else throw e;
   }
   const lh = data.lighthouseResult || {};
